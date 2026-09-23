@@ -96,6 +96,11 @@ of the containers themselves.
 **Requirements:** `kind`, `kubectl`, and `helm`. Everything runs on a local `kind`
 (Kubernetes-in-Docker) cluster — no cloud account or managed database needed.
 
+**Shortcut:** steps 1–3 below (create cluster, build/load image, install chart) can be run in one
+command with `bash scripts/setup-k8s.sh` — safe to rerun, it skips cluster creation if one already
+exists and upgrades the Helm release either way. The manual steps are still documented below since
+that's what's actually being asked for — the script is just a convenience on top.
+
 ### 1. Create the cluster
 
 ```bash
@@ -211,6 +216,8 @@ curl -L http://localhost:8000/<code>  # still resolves — data survived via the
 helm uninstall url-short
 kind delete cluster --name url-short
 ```
+
+Or `bash scripts/teardown-k8s.sh` to do both in one command.
 
 ## Part 3 — Operate and troubleshoot
 
