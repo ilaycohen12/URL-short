@@ -1,8 +1,9 @@
 # URL Shortener — DevOps Practical Assignment
 
-Status: **Parts 1–3 complete and verified.** One known open item, not yet resolved: `kubectl
-rollout undo` can desync `k8s/api-deployment.yaml` from the live cluster (see Part 2's Rollout and
-rollback section for details).
+Status: **Parts 1–3 complete and verified**, deployed via Docker Compose (Part 1) and a Helm chart
+on Kubernetes (Part 2). One known open item, not yet resolved: imperative rollback commands (`helm
+rollback` / `helm upgrade --set`) can desync `values.yaml` from the live cluster (see Part 2's
+Rollout and rollback section for details).
 
 ## Components
 - **API** — Python + FastAPI. Creates short URLs, redirects visitors to the original URL.
@@ -92,8 +93,8 @@ of the containers themselves.
 
 ## Part 2 — Kubernetes
 
-**Requirements:** `kind` and `kubectl`. Everything runs on a local `kind` (Kubernetes-in-Docker)
-cluster — no cloud account or managed database needed.
+**Requirements:** `kind`, `kubectl`, and `helm`. Everything runs on a local `kind`
+(Kubernetes-in-Docker) cluster — no cloud account or managed database needed.
 
 ### 1. Create the cluster
 
@@ -107,35 +108,28 @@ what lets the API be reached at `http://localhost:8000` later, the same address 
 ### 2. Build and load the API image
 
 `kind` runs its own container runtime, separate from your host's Docker — a locally built image
-has to be explicitly loaded into the cluster (no registry needed for local dev):
+has to be explicitly loaded into the cluster (no registry needed for local dev). **Do this for
+every image tag you plan to reference** (see the rollout section below for why this bit us once):
 
 ```bash
 docker build -t url-short-api:v1 ./api
 kind load docker-image url-short-api:v1 --name url-short
 ```
 
-### 3. Set up credentials
+### 3. Install the chart
 
 ```bash
-cp k8s/secret.example.yaml k8s/secret.yaml
-# edit k8s/secret.yaml if you want a non-default password — "changeme" works for local use
+helm install url-short ./helm/url-short
+kubectl get pods -w   # watch everything come up
 ```
 
-`k8s/secret.yaml` is gitignored — same pattern as `.env`/`.env.example` in Part 1.
+Credentials and config live in `helm/url-short/values.yaml` (default password `changeme`, same
+placeholder pattern as `.env.example`). To use a real password without committing it: create a
+gitignored `helm/url-short/values.secret.yaml` with your own `postgres.password`, and pass it at
+install/upgrade time with `-f helm/url-short/values.secret.yaml`, or override ad hoc with
+`--set postgres.password=...`.
 
-### 4. Apply everything
-
-```bash
-kubectl apply -f k8s/configmap.yaml -f k8s/secret.yaml \
-  -f k8s/postgres-pvc.yaml -f k8s/postgres-deployment.yaml -f k8s/postgres-service.yaml \
-  -f k8s/redis-deployment.yaml -f k8s/redis-service.yaml \
-  -f k8s/api-deployment.yaml -f k8s/api-service.yaml
-
-# watch everything come up
-kubectl get pods -w
-```
-
-### 5. Use it — same as Part 1
+### 4. Use it — same as Part 1
 
 ```bash
 curl http://localhost:8000/health
@@ -145,12 +139,15 @@ curl -L http://localhost:8000/1
 ```
 
 ### Design notes
-- **Plain YAML manifests**, not Helm or Kustomize (all three are explicitly allowed) — no
-  multi-environment variation exists in this assignment, so Helm's templating wasn't earning its
-  complexity here. Tradeoff, acknowledged: plain YAML has no variables, so values like
-  `POSTGRES_HOST`/`REDIS_HOST` in `k8s/configmap.yaml` have to be kept manually in sync with the
-  actual Service names (`postgres`, `redis`) — mitigated by consistent naming discipline rather
-  than tooling. Would reconsider Helm for a real multi-environment production deployment.
+- **Helm chart** (`helm/url-short/`), not plain manifests or Kustomize (all three are explicitly
+  allowed). Originally built as plain YAML first — genuinely working and fully tested — then
+  converted once it became clear Helm's templating directly fixes a real tradeoff the plain-YAML
+  version had accepted: `values.yaml` is now the single source of truth for things like the
+  Postgres/Redis Service names, so the ConfigMap's `POSTGRES_HOST`/`REDIS_HOST` and the actual
+  Service names derive from the *same* value (`.Values.postgres.name`) instead of having to be kept
+  in sync by hand. The chart was verified with the same rigor as the plain manifests it replaced —
+  full clean-cluster install, real Postgres pod deletion to prove persistence, and a live
+  `helm upgrade`/`helm rollback` cycle (see below) — not just written and assumed to work.
 - **Postgres**: Deployment (not StatefulSet — single instance, no replication needed) with
   `strategy: Recreate` (required, not optional — the default `RollingUpdate` would hang trying to
   mount the `ReadWriteOnce` PVC from two pods at once), backed by a PVC using the cluster's default
@@ -173,23 +170,31 @@ curl -L http://localhost:8000/1
 ### Rollout and rollback
 
 ```bash
-# roll out a new version: edit k8s/api-deployment.yaml's image tag, then
-kubectl apply -f k8s/api-deployment.yaml
+# roll out a new version (image must already be `kind load`-ed, see step 2)
+helm upgrade url-short ./helm/url-short --set api.image.tag=v2
 kubectl rollout status deployment/api
 
-# roll back to the previous version
-kubectl rollout undo deployment/api
+# roll back to the previous release
+helm rollback url-short
 kubectl rollout status deployment/api
+
+# see release history / what's actually deployed right now
+helm history url-short
+helm get values url-short
 ```
 
-**Known gap, not yet resolved:** `kubectl rollout undo` changes the live cluster but does **not**
-update `k8s/api-deployment.yaml` — after a rollback, the file and the cluster can silently
-disagree about which version is "supposed" to be running, until someone manually edits the file to
-match (which is what was done here after testing rollback). This is a real risk (a later
-`kubectl apply` of the stale file would silently undo the rollback). Not yet fixed with tooling —
-options being weighed are a small script that rolls back and syncs the manifest atomically, or
-GitOps (ArgoCD/Flux) for a real multi-environment setup, which is out of scope for this local
-assignment.
+**Real gotcha hit while testing this**: rolling out `v1` on a freshly recreated cluster produced
+`ImagePullBackOff` — `v1` had never been `kind load`-ed into *this* cluster instance (only `v2`
+had). This is the exact mutable-cluster/local-image trap documented in `explanations.md` — fixed by
+loading the image, which is why step 2 above calls it out explicitly.
+
+**Known gap, not fully resolved by switching to Helm:** `--set` overrides (and `helm rollback`)
+change the live release without touching `values.yaml` on disk — the same category of risk as
+`kubectl rollout undo` had with plain manifests, just with a better inspection tool now
+(`helm get values` shows what's actually deployed, which plain `kubectl` didn't give as directly).
+The safest pattern is to always change `values.yaml` (or a values override file) first and
+`helm upgrade -f ...` from it, treating `--set`/`rollback` as emergency-only, followed immediately
+by syncing the file to match. Not yet enforced with tooling.
 
 ### Verifying persistence and self-healing yourself
 
@@ -203,6 +208,7 @@ curl -L http://localhost:8000/<code>  # still resolves — data survived via the
 ### Cleanup
 
 ```bash
+helm uninstall url-short
 kind delete cluster --name url-short
 ```
 
@@ -336,16 +342,13 @@ request through the Service actually succeeds end-to-end.
 - No Prometheus/Grafana — deliberately chose in-`/health` counters instead; would stand up a real
   Prometheus+Grafana stack for genuine production monitoring (passive dashboards, alerting), which
   a point-in-time `curl` can't provide. See Part 3's Visibility section for the full reasoning.
-- **Known incomplete item**: `kubectl rollout undo` can desync `k8s/api-deployment.yaml` from the
-  live cluster (imperative command, doesn't touch the file) — happened once during testing, fixed
-  manually that time. Not yet fixed with tooling; considered either a small script that rolls back
-  and syncs the manifest atomically, or GitOps (ArgoCD/Flux) for a real multi-environment setup
-  (the latter out of scope for this local assignment). See Part 2's Rollout and rollback section.
+- **Known incomplete item**: `helm upgrade --set` / `helm rollback` change the live release without
+  touching `values.yaml` on disk — the same category of drift risk plain `kubectl rollout undo` had
+  (this actually recurred once during Helm testing too, same root cause). Not yet fixed with
+  tooling; `helm get values` at least makes the drift easy to detect now. See Part 2's Rollout and
+  rollback section.
 - Redis has no auth configured — acceptable for local-only scope, not something to carry into a
   shared environment as-is.
-- Plain Kubernetes YAML manifests, not Helm — no multi-environment variation exists in this
-  assignment to justify Helm's templating; would reconsider for a real production deployment across
-  multiple environments. See Part 2's Design notes for the full tradeoff.
 - See `documentation.md` for the full running decision log (why each choice was made, including
   every bug found and how) and `explanations.md` for concept write-ups (cache-aside, base62
   encoding, Docker/Compose/Kubernetes mechanics, etc.).

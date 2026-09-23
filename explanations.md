@@ -342,6 +342,26 @@ build number) over reusing a mutable one like `latest` or a hand-picked version 
 active development — with a unique tag, changing the manifest's image reference is itself enough
 to trigger a correct rollout, no separate restart command needed.
 
+## Helm charts, concretely
+
+A Helm chart is a templated set of Kubernetes manifests plus one `values.yaml` holding every
+configurable value. `helm install`/`upgrade` renders the templates by substituting `.Values.x`
+references and applies the result — functionally similar to `kubectl apply -f` on a folder, but
+with real templating (a value used in five places only needs to be defined once) and built-in
+release tracking (revision history, `helm rollback`, `helm get values` to see what's actually
+deployed). The templates themselves stay close to plain Kubernetes YAML — mostly the same
+Deployment/Service/ConfigMap shapes, just with hardcoded strings replaced by `{{ .Values.x }}`.
+
+## Mutable image tags bite you again on a fresh cluster
+
+Reusing a tag like `v1` across multiple cluster lifetimes means each *new* cluster starts with no
+memory of what was `kind load`-ed into a previous one — the tag existing "in general" (on your
+host's Docker, or in your own head) doesn't mean it exists on this specific node. Forgetting this
+produces the exact same `ImagePullBackOff` as the first time this was documented, just from a
+different trigger (a fresh cluster after switching to Helm, instead of a first-time deploy). The
+practical takeaway: `kind load` isn't a one-time setup step, it's something to redo for every tag
+you reference, every time the cluster itself is recreated.
+
 ## Named volumes (Docker) vs. PersistentVolumeClaims (Kubernetes)
 
 Containers are ephemeral by default — anything written inside them is lost when the container is

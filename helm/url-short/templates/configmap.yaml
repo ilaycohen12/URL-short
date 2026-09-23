@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: url-short-config
+  labels:
+    {{- include "url-short.labels" . | nindent 4 }}
+data:
+  POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+  POSTGRES_HOST: {{ .Values.postgres.name | quote }}
+  POSTGRES_PORT: {{ .Values.postgres.port | quote }}
+  REDIS_HOST: {{ .Values.redis.name | quote }}
+  REDIS_PORT: {{ .Values.redis.port | quote }}

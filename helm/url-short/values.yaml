@@ -1,0 +1,58 @@
+api:
+  image:
+    repository: url-short-api
+    tag: v2
+    pullPolicy: IfNotPresent
+  replicas: 1
+  servicePort: 8000
+  nodePort: 30080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  readinessProbe:
+    path: /health
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    failureThreshold: 3
+    timeoutSeconds: 3
+  livenessProbe:
+    path: /live
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+postgres:
+  name: postgres
+  image: postgres:16
+  user: urlshortener
+  # Placeholder only — same pattern as .env.example. Override with
+  # `--set postgres.password=...` or a separate (gitignored) values file
+  # for a real deployment; never commit a real password here.
+  password: changeme
+  database: urlshortener
+  port: 5432
+  storage: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+redis:
+  name: redis
+  image: redis:7
+  port: 6379
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

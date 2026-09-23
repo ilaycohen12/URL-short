@@ -1,5 +1,5 @@
 .env
-k8s/secret.yaml
+helm/url-short/values.secret.yaml
 __pycache__/
 *.pyc
 .venv/
