@@ -317,6 +317,31 @@ disagree, and the next person to blindly `kubectl apply -f` the old manifest wou
 rollback without realizing it. The fix is discipline, not tooling: after any imperative change you
 intend to keep, update the manifest to match reality.
 
+## Logs vs. metrics vs. a full monitoring stack
+
+Three genuinely different things, often conflated: **logs** are discrete text events, read
+chronologically, good for "what exactly happened at this moment." **Metrics** are numeric counters
+accumulated over time (request counts, latencies) — more useful for "what's the overall shape of
+traffic," but a raw metrics endpoint on its own is just a snapshot of current numbers, not a trend,
+until something scrapes and stores it repeatedly. A **full monitoring stack** (Prometheus storing
+those snapshots over time + Grafana visualizing them, often plus Alertmanager) is what turns
+metrics into passive dashboards and alerts — genuinely useful, but real infrastructure to run and
+maintain, not something to reach for by default. A lightweight middle ground for a small app: fold
+a few in-memory counters directly into an existing health endpoint — gives a human-readable
+snapshot of both state and rough activity in one place, with zero additional infrastructure.
+
+## Reusing a mutable image tag means `kubectl apply` won't pick up new content alone
+
+If you rebuild an image under the *same* tag (e.g. `v2` again) and reload it into the cluster, a
+running Deployment's pod spec still just says `image: url-short-api:v2` — textually unchanged —
+so `kubectl apply` sees no diff and triggers no rollout. The already-running pod keeps using
+whatever it already had, even though the tag now technically points at different content. To force
+it to actually pick up the new image, you need an explicit `kubectl rollout restart deployment/x`.
+This is exactly why real deployments prefer unique, immutable tags per build (a commit SHA, a
+build number) over reusing a mutable one like `latest` or a hand-picked version string during
+active development — with a unique tag, changing the manifest's image reference is itself enough
+to trigger a correct rollout, no separate restart command needed.
+
 ## Named volumes (Docker) vs. PersistentVolumeClaims (Kubernetes)
 
 Containers are ephemeral by default — anything written inside them is lost when the container is

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: url-short-api:v1
+          image: url-short-api:v2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

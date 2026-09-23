@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cache import check_redis, get_redis
 from app.db import check_db, get_db, init_models
 from app.models import URLMapping
-from app.schemas import HealthResponse, ShortenRequest, ShortenResponse
+from app.schemas import HealthResponse, Metrics, ShortenRequest, ShortenResponse
 from app.shortcode import decode, encode
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -20,6 +21,15 @@ STARTUP_RETRY_ATTEMPTS = 30
 STARTUP_RETRY_DELAY_SECONDS = 2
 POSTGRES_INT_MAX = 2_147_483_647
 APP_VERSION = "v2"
+
+START_TIME = time.monotonic()
+_metrics = {
+    "shorten_requests": 0,
+    "redirects": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "not_found": 0,
+}
 
 
 async def wait_for_dependencies() -> None:
@@ -63,6 +73,7 @@ async def shorten_url(
     short_code = encode(mapping.id)
     short_url = str(request.base_url) + short_code
 
+    _metrics["shorten_requests"] += 1
     logger.info("Created short code %s -> %s", short_code, mapping.original_url)
     return ShortenResponse(short_code=short_code, short_url=short_url)
 
@@ -74,7 +85,14 @@ async def health(response: Response) -> HealthResponse:
     overall = "ok" if postgres_ok and redis_ok else "degraded"
     if not (postgres_ok and redis_ok):
         response.status_code = 503
-    return HealthResponse(status=overall, postgres=postgres_ok, redis=redis_ok, version=APP_VERSION)
+    return HealthResponse(
+        status=overall,
+        postgres=postgres_ok,
+        redis=redis_ok,
+        version=APP_VERSION,
+        uptime_seconds=round(time.monotonic() - START_TIME, 1),
+        metrics=Metrics(**_metrics),
+    )
 
 
 @app.get("/live")
@@ -91,22 +109,29 @@ async def resolve_short_code(
     try:
         mapping_id = decode(short_code)
     except ValueError:
+        _metrics["not_found"] += 1
         raise HTTPException(status_code=404, detail="short code not found")
 
     if not 0 < mapping_id <= POSTGRES_INT_MAX:
+        _metrics["not_found"] += 1
         raise HTTPException(status_code=404, detail="short code not found")
 
     cache_key = f"url:{short_code}"
     cached_url = await redis.get(cache_key)
     if cached_url:
+        _metrics["cache_hits"] += 1
+        _metrics["redirects"] += 1
         logger.info("Cache hit for %s", short_code)
         return RedirectResponse(url=cached_url, status_code=302)
 
     result = await db.execute(select(URLMapping).where(URLMapping.id == mapping_id))
     mapping = result.scalar_one_or_none()
     if mapping is None:
+        _metrics["not_found"] += 1
         raise HTTPException(status_code=404, detail="short code not found")
 
     await redis.set(cache_key, mapping.original_url)
+    _metrics["cache_misses"] += 1
+    _metrics["redirects"] += 1
     logger.info("Cache miss for %s, populated cache from Postgres", short_code)
     return RedirectResponse(url=mapping.original_url, status_code=302)
