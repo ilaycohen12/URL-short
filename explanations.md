@@ -164,6 +164,159 @@ This only covers *startup* ordering though — it doesn't help if a dependency g
 while the app is already running, which is why the app's own retry/health-check logic still
 matters on top of this, not instead of it.
 
+## `kind` (Kubernetes-in-Docker)
+
+`kind` runs each Kubernetes cluster "node" as a Docker container rather than a VM, using Docker
+itself as the substrate. This makes it fast and lightweight for local development/testing, since
+it reuses your existing Docker install instead of needing a separate VM driver. The tradeoff:
+because each node is a container, port mappings from the host into the cluster must be declared
+in the cluster config **at creation time** — you can't add one to an already-running cluster the
+way you can with a Compose file, since Docker itself doesn't support adding port publishes to a
+running container.
+
+## StorageClass and dynamic provisioning
+
+A `StorageClass` tells Kubernetes *how* to create storage when a pod asks for it via a
+PersistentVolumeClaim (PVC) — which underlying provisioner to use, what happens to the data when
+the claim is deleted, etc. `kind` ships a default one (`standard`, backed by
+`rancher.io/local-path`, which just uses a directory on the node's own disk) so a PVC can be
+requested without us having to configure a storage backend ourselves — appropriate for local
+development; a real cloud cluster would point this at actual block storage instead.
+
+## Why `kind` needs `kind load docker-image`
+
+Each `kind` node is a Docker container that runs its own container runtime (containerd) inside
+itself — it's a separate image store from your host's Docker daemon, even though both are
+technically "Docker" in some sense. `docker build` on your host only populates the host's image
+store; the cluster can't see those images until they're explicitly copied in with
+`kind load docker-image`. A real (non-local) cluster doesn't have this step at all — instead you
+push the image to a container registry (Docker Hub, ECR, GCR, etc.) and the cluster pulls it from
+there over the network; `kind load` exists purely to skip needing a registry for local development.
+
+## `crictl`
+
+A CLI that talks directly to a Kubernetes node's container runtime (via the CRI — Container
+Runtime Interface), bypassing `kubectl` and the Kubernetes API server entirely. Useful for
+answering low-level questions `kubectl` can't directly answer, like "is this image actually
+present on this specific node" — the first thing to check when a pod is stuck in
+`ImagePullBackOff`.
+
+## `stringData` vs. `data` on a Kubernetes Secret
+
+`data` requires every value to already be base64-encoded by you before it goes in the YAML —
+error-prone to write and read by hand. `stringData` lets you write plain text in the manifest;
+Kubernetes base64-encodes it automatically when the object is created, and it shows up under
+`.data` from then on. Same end result stored in the cluster either way — `stringData` is purely a
+convenience for authoring the manifest, not a different storage mechanism.
+
+## Kubernetes Secrets are encoded, not encrypted (by default)
+
+Base64 is a reversible *encoding*, not encryption — anyone who can read a Secret object via the
+API (`kubectl get secret -o yaml`, same RBAC permission as reading a ConfigMap) can decode its
+value in one command. The Secret/ConfigMap split exists for *architecture* — RBAC can restrict
+Secret access separately, and it's the standard integration point for real secret-management tools
+— not because Secrets are inherently encrypted at rest. A production cluster would layer on
+encryption-at-rest for etcd and/or an external secrets manager on top of this.
+
+## Deployment vs. StatefulSet for a single-instance database
+
+StatefulSet is the Kubernetes-native choice for stateful, clustered workloads — it gives each pod
+a stable, predictable identity (name, network address) that survives rescheduling, which matters
+when replicas need to know about each other (e.g. a Postgres primary/replica set). For a single
+instance with no replication, that machinery isn't buying anything — a plain Deployment with
+`replicas: 1` behaves identically in practice for this case, with less to configure and explain.
+
+## `strategy: Recreate` vs. `RollingUpdate`, and why it matters with RWO storage
+
+A Deployment's default update strategy (`RollingUpdate`) starts the new pod *before* stopping the
+old one, to avoid downtime. That only works if both pods *can* run simultaneously — but a
+`ReadWriteOnce` PVC can only be mounted by one pod at a time. With the default strategy, an update
+to a single-instance database backed by an RWO volume would hang indefinitely: the new pod can't
+start (can't get the volume) and the old one never gets torn down to free it. `strategy: Recreate`
+tells Kubernetes to stop the old pod first, then start the new one — the correct choice whenever a
+workload can't have two live instances at once, at the cost of a brief gap in availability during
+updates (acceptable for a single local Postgres instance; not for something meant to be
+zero-downtime).
+
+## `subPath` on a volume mount
+
+Mounting a PersistentVolumeClaim directly onto Postgres's data directory can hit a known issue:
+some storage provisioners leave content (like a `lost+found` folder) at the volume's root, which
+`initdb` can refuse to initialize into. Setting `subPath: pgdata` mounts a subdirectory *within*
+the volume as the actual mount point instead of the volume's root, sidestepping that class of
+problem entirely — a small defensive habit, not something specific to any one provisioner.
+
+## Why liveness probes shouldn't check downstream dependencies
+
+A liveness probe failing tells Kubernetes to **kill and restart** the container; a readiness probe
+failing tells it to **stop routing traffic to it**, without touching the container's lifecycle.
+If a liveness probe checks something outside the app's own control — like "is Postgres
+reachable" — then a database outage causes Kubernetes to repeatedly restart a perfectly healthy
+API process, over and over, for a problem restarting it can never fix. That's strictly worse than
+doing nothing: it adds restart churn (and potential `CrashLoopBackOff` noise) on top of an outage
+that was already being handled correctly by the readiness probe alone. The fix is a liveness
+endpoint that only proves the process itself is alive and responsive (a trivial handler with no
+dependency calls), while the readiness endpoint is the one allowed to react to dependency health.
+See also [[readiness-vs-liveness-probes-kubernetes]] for the base distinction.
+
+## HTTP probes check status codes, not response bodies
+
+A Kubernetes `httpGet` probe only looks at the HTTP status code (2xx–3xx = success, anything else
+= failure) — it never parses the response body. An endpoint that always returns `200 OK` with a
+JSON field like `"status": "degraded"` inside it will always look healthy to a probe, no matter
+what the body says. Any health endpoint meant to drive a probe has to encode its result in the
+status code itself (e.g. `503` when unhealthy), not just in the payload.
+
+## Ways to reach a Service from outside the cluster
+
+- **`ClusterIP`** (the default) — internal only, unreachable from outside the cluster at all. What
+  we used for `postgres`/`redis`.
+- **`NodePort`** — opens a fixed port (30000–32767 range) on every cluster node itself, forwarding
+  to the Service. Persistent — works as long as the cluster's running, no matter what's happening
+  in any particular terminal. What we used for `api`.
+- **`LoadBalancer`** — asks the cloud provider to provision a real external load balancer with its
+  own public IP. Doesn't really apply locally (`kind` has no cloud to ask), which is why it's not
+  an option here.
+- **`kubectl port-forward`** — not a Service type at all; a client-side tunnel that only exists
+  while that specific `kubectl` command keeps running in a terminal. Great for quick debugging
+  access to something that's normally `ClusterIP`-only; not something you'd point a real user or
+  another system at.
+
+## Kubernetes has no native "start this after that's healthy" between Deployments
+
+Docker Compose's `depends_on: condition: service_healthy` can delay starting one container until
+another passes its healthcheck. Kubernetes has no equivalent for ordering *between* separate
+Deployments — all Deployments applied together start their pods simultaneously, with no built-in
+concept of "wait for this other Deployment to be healthy first." The two real ways to handle a
+dependency that isn't ready yet are: (1) the app's own retry logic, sized generously enough to
+cover a worst-case cold start including image pulls, not just the warm-start case Compose users
+might be used to — what we widened here — or (2) an `initContainer` on the dependent pod that
+actively blocks (e.g. polling the dependency) before the main container even starts. We used
+option 1, already having the retry logic from Part 0; an `initContainer` would be the more
+idiomatic Kubernetes-native alternative for a more failure-sensitive real system.
+
+## `kubectl rollout` — how rollout/rollback actually work
+
+A Deployment keeps its **old ReplicaSets around** (scaled to 0, not deleted) after an update,
+specifically so a rollback doesn't need to rebuild anything — `kubectl rollout undo` just scales
+the previous ReplicaSet back up and the current one down. This is why rollback is fast and
+reliable: it's not re-pulling an image or reapplying a manifest, it's reusing an object that was
+already sitting there. `kubectl rollout history` lists each revision; `kubectl rollout undo
+--to-revision=N` can target a specific one, not just "one back." The `CHANGE-CAUSE` column is only
+populated if a `kubernetes.io/change-cause` annotation was set at the time of that revision —
+without it, history is accurate but not self-explanatory.
+
+## Declarative manifests vs. imperative commands — the drift risk
+
+`kubectl apply -f file.yaml` is *declarative*: the file is the source of truth, and the cluster is
+made to match it. `kubectl rollout undo`, `kubectl scale`, `kubectl set image`, etc. are
+*imperative*: they change the live cluster directly, without touching any file. Mixing the two
+(which is completely normal — `rollout undo` is the standard rollback command) creates a real risk:
+after an imperative command, the cluster's actual state and the committed manifest can silently
+disagree, and the next person to blindly `kubectl apply -f` the old manifest would undo your
+rollback without realizing it. The fix is discipline, not tooling: after any imperative change you
+intend to keep, update the manifest to match reality.
+
 ## Named volumes (Docker) vs. PersistentVolumeClaims (Kubernetes)
 
 Containers are ephemeral by default — anything written inside them is lost when the container is
