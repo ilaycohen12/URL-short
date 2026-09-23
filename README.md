@@ -58,8 +58,7 @@ Waits for Postgres/Redis to report healthy before starting the API.
 
 ```bash
 curl http://localhost:8000/health
-curl -X POST http://localhost:8000/shorten -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/some/path"}'
+curl -X POST http://localhost:8000/shorten -H "Content-Type: application/json" -d '{"url":"https://example.com/x"}'
 curl -L http://localhost:8000/1        # or open it directly in a browser
 ```
 
@@ -103,8 +102,7 @@ pass `-f` it at install time, or `--set postgres.password=...`.
 
 ```bash
 curl http://localhost:8000/health   # same address as Part 1 — see kind-cluster.yaml's port mapping
-curl -X POST http://localhost:8000/shorten -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/anything"}'
+curl -X POST http://localhost:8000/shorten -H "Content-Type: application/json" -d '{"url":"https://example.com/x"}'
 curl -L http://localhost:8000/1
 ```
 
