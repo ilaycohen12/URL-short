@@ -90,6 +90,8 @@ Running log of what was done and why, split by category. Newest entries at the b
 
 - **2026-09-23** — Added `scripts/setup-k8s.sh` and `scripts/teardown-k8s.sh` as an optional one-command shortcut for Part 2's manual steps (create cluster, build, load, `helm upgrade --install`, wait for ready) — added *alongside*, not replacing, the README's documented manual steps, since the assignment specifically wants those followable step-by-step. Reads the image tag from `helm/url-short/values.yaml` itself rather than hardcoding it in the script, keeping one source of truth. Verified for real: ran from a fully clean state (cluster created, image built/loaded, chart installed, all pods ready, `/health` confirmed), then reran immediately to confirm genuine idempotency — cluster-creation skipped, Helm release cleanly upgraded (revision 2), zero errors, zero unnecessary pod restarts.
 
+- **2026-09-23** — Rewrote `README.md` for readability per explicit user request: consistent structure per part (Requirements / How to run / How to stop / Design notes), trimmed ~40% (362 → 224 lines) by moving long backstory/reasoning to `documentation.md` (already there) and keeping only the essential decision + one-line why in the README itself. Part 3 now opens by explicitly framing what the assignment asks for before answering it. No content lost — full detail remains in `documentation.md`/`explanations.md`.
+
 ## Bug-fixes
 
 - **2026-09-23** (found during step 9 local sanity check) — Three real bugs caught before Part 1:
