@@ -92,6 +92,8 @@ Running log of what was done and why, split by category. Newest entries at the b
 
 - **2026-09-23** — Rewrote `README.md` for readability per explicit user request: consistent structure per part (Requirements / How to run / How to stop / Design notes), trimmed ~40% (362 → 224 lines) by moving long backstory/reasoning to `documentation.md` (already there) and keeping only the essential decision + one-line why in the README itself. Part 3 now opens by explicitly framing what the assignment asks for before answering it. No content lost — full detail remains in `documentation.md`/`explanations.md`.
 
+- **2026-09-23** — Real, recurring issue: `curl` in Windows PowerShell is aliased to `Invoke-WebRequest`, which doesn't understand real curl flags at all. First assumed `curl.exe` (the real binary, bypassing the alias) would fix it — tested directly in PowerShell and it did NOT: PowerShell's own argument-passing to external commands mangles inline JSON's quotes differently than bash does, so even `curl.exe --json '{"url":"..."}'` fails with a JSON decode error under real PowerShell, despite working fine from git-bash. Also confirmed `-L` isn't a valid `Invoke-WebRequest` parameter either. Fixed properly by adding a fully separate, independently-tested PowerShell block (`Invoke-RestMethod`/`Invoke-WebRequest`, no curl flags at all) to the README instead of trying to patch curl syntax further.
+
 ## Bug-fixes
 
 - **2026-09-23** (found during step 9 local sanity check) — Three real bugs caught before Part 1:

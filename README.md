@@ -43,6 +43,18 @@ For the full decision log (why each choice was made, every bug found and how) se
 
 Interactive docs (click-to-try, no `curl` needed) at `/docs` once the API is running.
 
+> **Windows PowerShell:** `curl` there is aliased to `Invoke-WebRequest`, which doesn't understand
+> real curl's flags (`-X`, `-H`, `-L`, `--json`) at all — not even `curl.exe` fixes it, since
+> PowerShell's own argument-quoting for external commands mangles the JSON body differently than
+> bash does. Skip `curl` entirely and use PowerShell's native equivalents instead:
+> ```powershell
+> Invoke-RestMethod -Uri "http://localhost:8000/health"
+> Invoke-RestMethod -Uri "http://localhost:8000/shorten" -Method Post -ContentType "application/json" -Body '{"url":"https://example.com/x"}'
+> Invoke-WebRequest -Uri "http://localhost:8000/1"   # follows the redirect automatically, no -L needed
+> ```
+> (Same commands work for both Part 1 and Part 2 — only the port ever changes, and it doesn't here.)
+> Or simplest of all: use `/docs` above, no shell-specific syntax needed at all.
+
 ---
 
 ## Part 1 — Docker Compose
