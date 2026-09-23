@@ -4,11 +4,14 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import check_redis, get_redis
+from app.dashboard import DASHBOARD_HTML
 from app.db import check_db, get_db, init_models
 from app.models import URLMapping
 from app.schemas import HealthResponse, Metrics, ShortenRequest, ShortenResponse
@@ -29,6 +32,8 @@ _metrics = {
     "cache_hits": 0,
     "cache_misses": 0,
     "not_found": 0,
+    "validation_errors": 0,
+    "errors": 0,
 }
 
 
@@ -58,6 +63,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="URL Shortener", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    _metrics["validation_errors"] += 1
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    _metrics["errors"] += 1
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 @app.post("/shorten", response_model=ShortenResponse)
@@ -98,6 +116,11 @@ async def health(response: Response) -> HealthResponse:
 @app.get("/live")
 async def live() -> dict:
     return {"status": "alive"}
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard() -> str:
+    return DASHBOARD_HTML
 
 
 @app.get("/{short_code}")

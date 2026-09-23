@@ -25,6 +25,8 @@ class Metrics(BaseModel):
     cache_hits: int
     cache_misses: int
     not_found: int
+    validation_errors: int
+    errors: int
 
 
 class HealthResponse(BaseModel):

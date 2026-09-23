@@ -362,6 +362,19 @@ different trigger (a fresh cluster after switching to Helm, instead of a first-t
 practical takeaway: `kind load` isn't a one-time setup step, it's something to redo for every tag
 you reference, every time the cluster itself is recreated.
 
+## FastAPI/Starlette exception handlers
+
+`@app.exception_handler(SomeExceptionType)` lets you intercept a specific exception type globally,
+across every route, instead of wrapping each route in its own try/except. Starlette picks the most
+specific registered handler for a given exception — so a handler for the base `Exception` class
+only catches things with no more specific handler already registered (like `HTTPException`, which
+FastAPI handles internally), meaning it's safe to add a catch-all without breaking existing 404s/
+other intentional `HTTPException`s. One thing to watch: intercepting an exception yourself means
+you're now responsible for anything the default handling used to do automatically — here, that
+meant explicitly logging the traceback (`exc_info=True`) ourselves, since Starlette's own automatic
+traceback logging only fires when an exception is left to propagate to *its* default handler, not
+when a custom one catches it first.
+
 ## Named volumes (Docker) vs. PersistentVolumeClaims (Kubernetes)
 
 Containers are ephemeral by default — anything written inside them is lost when the container is

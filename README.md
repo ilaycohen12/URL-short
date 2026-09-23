@@ -26,6 +26,7 @@ For the full decision log (why each choice was made, every bug found and how) se
 | `GET /{short_code}` | Redirects (HTTP 302) to the original URL. 404 if not found. |
 | `GET /health` | Status, dependencies, version, uptime, traffic counters. HTTP 503 when a dependency is down. |
 | `GET /live` | Bare liveness check, no dependency calls. |
+| `GET /dashboard` | Styled HTML view of `/health`, auto-refreshing every 3s — same data, easier to glance at. |
 
 **`GET /health` response:**
 ```json
@@ -36,7 +37,8 @@ For the full decision log (why each choice was made, every bug found and how) se
   "version": "v2",
   "uptime_seconds": 12.0,
   "metrics": {
-    "shorten_requests": 2, "redirects": 3, "cache_hits": 2, "cache_misses": 1, "not_found": 1
+    "shorten_requests": 2, "redirects": 3, "cache_hits": 2, "cache_misses": 1, "not_found": 1,
+    "validation_errors": 0, "errors": 0
   }
 }
 ```
@@ -171,10 +173,11 @@ helm get values url-short     # what's actually deployed right now
 The assignment asks for: enough visibility for an on-call engineer, plus a runbook for three
 specific situations. Both below.
 
-**How to check it:** `curl http://localhost:8000/health`, or open that URL (or `/docs`) directly in
-a browser — status, per-dependency reachability, version, uptime, rough traffic counts, all in one
-place. Plus logs (`kubectl logs -l app=api` / `docker compose logs api`) for tracebacks on
-unhandled errors.
+**How to check it:** `curl http://localhost:8000/health`, or open that URL (or `/dashboard` for a
+styled, auto-refreshing view, or `/docs`) directly in a browser — status, per-dependency
+reachability, version, uptime, and traffic counters (including `validation_errors`/`errors`, so a
+bad-input spike is distinguishable from an actual server-side bug), all in one place. Plus logs
+(`kubectl logs -l app=api` / `docker compose logs api`) for tracebacks on unhandled errors.
 
 **Design notes:**
 - `/health` returns HTTP `503` (not `200`) when degraded — probes and monitoring tools key off
