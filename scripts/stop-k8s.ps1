@@ -1,4 +1,4 @@
-# PowerShell entry point for teardown-k8s.sh (same steps, same logic).
+# PowerShell entry point for stop-k8s.sh (same steps, same logic).
 # Runs the .sh through Git Bash explicitly: a bare `bash` in PowerShell may
 # resolve to WSL's bash.exe, which can't see Windows-installed kind/helm/kubectl.
 $ErrorActionPreference = 'Stop'
@@ -14,5 +14,5 @@ if (-not (Test-Path $gitBash)) { throw "Git Bash not found at $gitBash" }
 # would turn that into a fatal error if the caller redirects it (2>&1). The exit code below
 # is what signals real failure.
 $ErrorActionPreference = 'Continue'
-& $gitBash (Join-Path $PSScriptRoot 'teardown-k8s.sh') @args
+& $gitBash (Join-Path $PSScriptRoot 'stop-k8s.sh') @args
 exit $LASTEXITCODE

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Tears down everything scripts/setup-k8s.sh created. Safe to rerun.
+# FULL RESET: tears down everything scripts/setup-k8s.sh created, INCLUDING all
+# data (short links). Kubernetes equivalent of `docker compose down -v`.
+# To stop the cluster but keep the data, use scripts/stop-k8s.sh instead. Safe to rerun.
 set -euo pipefail
+
+echo "==> Full reset: deleting the cluster and ALL data (use stop-k8s to keep data)."
 
 CLUSTER_NAME=url-short
 CONTEXT="kind-${CLUSTER_NAME}"

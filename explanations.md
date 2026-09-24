@@ -400,3 +400,22 @@ Gotchas: testing `GET /{short_code}` there usually fails with "Failed to fetch" 
 JavaScript follows the 302 to an external site and the browser blocks it (CORS). The app is fine;
 test redirects by pasting the short URL into the address bar. In production `/docs` is often
 disabled or protected, since it maps out the whole API for anyone who finds it.
+
+## Where kind's data actually lives (stop vs. teardown)
+
+A kind "cluster" is not a VM — each node is a **Docker container** (here just one,
+`url-short-control-plane`) running Kubernetes inside it. A PersistentVolumeClaim in kind is backed by
+kind's default `local-path` provisioner, which simply creates a folder **on that container's disk**.
+So the PVC protects data from *pod* deletion (the folder outlives the pod), but not from deleting
+the node container itself:
+
+| Action | Postgres data |
+|---|---|
+| Postgres pod deleted / crashes | kept — the PVC outlives the pod |
+| `docker stop` the node container (`stop-k8s`) | kept — a stopped container keeps its disk, like a powered-off PC |
+| `helm uninstall` | deleted — the PVC is one of the chart's resources |
+| `kind delete cluster` (`teardown-k8s`) | deleted — the container and its disk are removed |
+
+Same idea as Docker Compose: `docker compose down` removes containers but keeps named volumes,
+`down -v` removes the volumes too. In a real cluster, PVCs are backed by network storage (e.g. an
+AWS EBS volume) that lives outside any node, which is why deleting nodes there doesn't lose data.

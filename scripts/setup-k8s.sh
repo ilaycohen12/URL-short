@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Convenience wrapper around Part 2's manual setup steps (see README.md).
-# Safe to rerun: skips cluster creation if it exists, `helm upgrade --install`
+# Safe to rerun: skips cluster creation if it exists (and starts it if it was
+# stopped by stop-k8s.sh, keeping its data), `helm upgrade --install`
 # creates or updates the release either way.
 set -euo pipefail
 
@@ -24,6 +25,17 @@ docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon not reachable - star
 echo "==> Creating kind cluster (skipping if it already exists)..."
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   echo "    Cluster '$CLUSTER_NAME' already exists, skipping."
+  # Stopped by scripts/stop-k8s.sh -> start the node container again; its disk
+  # (including the Postgres PVC) was kept, so the data comes back with it.
+  if [ "$(docker inspect -f '{{.State.Running}}' "${CLUSTER_NAME}-control-plane")" != "true" ]; then
+    echo "    Cluster is stopped - starting it (existing data is kept)..."
+    docker start "${CLUSTER_NAME}-control-plane" >/dev/null
+    for _ in $(seq 1 60); do
+      kubectl --context "$CONTEXT" get nodes >/dev/null 2>&1 && break
+      sleep 2
+    done
+    kubectl --context "$CONTEXT" wait --for=condition=Ready node --all --timeout=120s
+  fi
 else
   kind create cluster --name "$CLUSTER_NAME" --config "$REPO_ROOT/k8s/kind-cluster.yaml"
 fi
@@ -42,6 +54,13 @@ kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=postgres --ti
 kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=redis --timeout=60s
 kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=api --timeout=120s
 
+# After a restart, pods can briefly still show their pre-stop Ready status,
+# so confirm through the real endpoint rather than trusting `kubectl wait` alone.
+echo "==> Checking /health..."
+for _ in $(seq 1 30); do
+  curl -sf http://localhost:8000/health >/dev/null && break
+  sleep 2
+done
 echo "==> Done. API available at http://localhost:8000"
 curl -s http://localhost:8000/health
 echo

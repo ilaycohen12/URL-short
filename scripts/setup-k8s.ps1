@@ -10,5 +10,9 @@ if (-not $git) { throw "git not found on PATH - install Git for Windows (it prov
 $gitBash = Join-Path (Split-Path (Split-Path $git.Source)) 'bin\bash.exe'
 if (-not (Test-Path $gitBash)) { throw "Git Bash not found at $gitBash" }
 
+# Tools like docker write normal progress to stderr; with 'Stop' in effect, PowerShell 5.1
+# would turn that into a fatal error if the caller redirects it (2>&1). The exit code below
+# is what signals real failure.
+$ErrorActionPreference = 'Continue'
 & $gitBash (Join-Path $PSScriptRoot 'setup-k8s.sh') @args
 exit $LASTEXITCODE

@@ -14,7 +14,7 @@ visibility and a runbook on top (Part 3).
 | `docker-compose.yml`, `.env.example` | Part 1 |
 | `helm/url-short/` | Part 2 Helm chart — `values.yaml` is the single source of truth |
 | `k8s/kind-cluster.yaml` | Local kind cluster config (maps the API to `localhost:8000`) |
-| `scripts/` | One-command Kubernetes setup/teardown (`.sh` + PowerShell `.ps1`) |
+| `scripts/` | One-command Kubernetes setup / stop / teardown (`.sh` + PowerShell `.ps1`) |
 | `documentation.md` | Decision log — why each choice was made, every bug found |
 | `explanations.md` | Concept write-ups (cache-aside, base62, Helm, probes, …) |
 
@@ -41,8 +41,9 @@ URL-short/
 ├── k8s/
 │   └── kind-cluster.yaml
 ├── scripts/
-│   ├── setup-k8s.sh / .ps1
-│   └── teardown-k8s.sh / .ps1
+│   ├── setup-k8s.sh / .ps1       # create (or restart) the cluster + deploy
+│   ├── stop-k8s.sh / .ps1        # stop the cluster, keep data
+│   └── teardown-k8s.sh / .ps1    # delete the cluster and all data
 ├── docker-compose.yml
 ├── .env.example
 ├── README.md
@@ -63,8 +64,10 @@ Compose and Kubernetes are **two independent ways to run the same app**. Both se
 | Needs | Docker with Compose | Docker, `kind`, `kubectl`, `helm` |
 | Start — Linux / macOS / Git Bash | `cp .env.example .env` then `docker compose up --build` | `bash scripts/setup-k8s.sh` |
 | Start — Windows PowerShell | `cp .env.example .env` then `docker compose up --build` | `.\scripts\setup-k8s.ps1` |
-| Stop — Linux / macOS / Git Bash | `docker compose down` | `bash scripts/teardown-k8s.sh` |
-| Stop — Windows PowerShell | `docker compose down` | `.\scripts\teardown-k8s.ps1` |
+| Stop, keep data — Linux / macOS / Git Bash | `docker compose down` | `bash scripts/stop-k8s.sh` |
+| Stop, keep data — Windows PowerShell | `docker compose down` | `.\scripts\stop-k8s.ps1` |
+| Full reset (delete all data) — Linux / macOS / Git Bash | `docker compose down -v` | `bash scripts/teardown-k8s.sh` |
+| Full reset (delete all data) — Windows PowerShell | `docker compose down -v` | `.\scripts\teardown-k8s.ps1` |
 
 **2. Shorten a URL** → you get back a `short_url` (e.g. `http://localhost:8000/1`).
 Commands in [Using the API](#using-the-api), or click-to-try at http://localhost:8000/docs.
@@ -162,12 +165,21 @@ kind load docker-image url-short-api:v2 --name url-short    # kind has its own i
 helm install url-short ./helm/url-short
 ```
 
-**Stop:**
+**Stop — two options** (same idea as Compose's `down` vs `down -v`):
 ```bash
+# Stop, KEEP the data — short links are still there after the next setup-k8s:
+bash scripts/stop-k8s.sh           # PowerShell: .\scripts\stop-k8s.ps1
+# (manually: docker stop url-short-control-plane)
+
+# Full reset, DELETE everything — the next setup-k8s starts from an empty database:
 bash scripts/teardown-k8s.sh       # PowerShell: .\scripts\teardown-k8s.ps1
-# or manually:
-helm uninstall url-short && kind delete cluster --name url-short
+# (manually: helm uninstall url-short && kind delete cluster --name url-short)
 ```
+A kind cluster is a single Docker container (`url-short-control-plane`), and the Postgres PVC is
+stored on that container's disk. `stop` just stops the container, so the disk — and the data —
+stays; `setup-k8s` detects the stopped cluster and starts it again instead of creating a new
+one. `teardown` deletes the container, and the data goes with it. (Note: `helm uninstall` alone
+also deletes the data — the PVC is part of the chart.)
 
 **Credentials** live in `helm/url-short/values.yaml` (default `changeme`, same placeholder
 pattern as `.env.example`). For a real password: create a gitignored
