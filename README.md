@@ -133,6 +133,7 @@ equivalent `curl` command and the status code for each call. It's generated from
 Pydantic models), so it can't go out of date. Don't test redirects there — the browser blocks the
 page from following a 302 to an external site ("Failed to fetch"); paste the short URL into the
 address bar instead.
+
 ---
 
 ## Part 1 — Docker Compose
