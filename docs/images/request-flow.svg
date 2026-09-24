@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-label="Request flow. Shorten: you send a URL to the API, the API saves it in Postgres and gets id 61, and returns the short URL localhost:8000/Z. Open: you open /Z, the API looks in the Redis cache first; if it's not there it asks Postgres and keeps a copy in Redis; then it answers with a 302 redirect and your browser goes to the original website.">
+  <style>
+    .bg { fill: #FFFFFF; stroke: #D0D7DE; }
+    .box { fill: #F6F8FA; stroke: #1F2328; stroke-width: 1.2; }
+    .key { fill: #FFF4ED; stroke: #C2410C; stroke-width: 1.6; }
+    .t { font: 600 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1F2328; }
+    .s { font: 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636E; }
+    .lane { font: 600 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #C2410C; letter-spacing: .06em; }
+    .lbl { font: 12px ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; fill: #1F2328; }
+    .ln { stroke: #1F2328; stroke-width: 1.4; fill: none; }
+    .acc { stroke: #C2410C; }
+    .dash { stroke-dasharray: 5 4; }
+    .rule { stroke: #D0D7DE; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#1F2328"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#C2410C"/></marker>
+  </defs>
+  <rect class="bg" x="0.5" y="0.5" width="719" height="399" rx="8"/>
+
+  <!-- 1. shorten -->
+  <text class="lane" x="20" y="30">1 · SHORTEN A URL</text>
+  <rect class="box" x="20" y="48" width="120" height="50" rx="6"/>
+  <text class="t" x="80" y="78" text-anchor="middle">You</text>
+  <rect class="box" x="250" y="48" width="140" height="50" rx="6"/>
+  <text class="t" x="320" y="70" text-anchor="middle">API</text>
+  <text class="s" x="320" y="88" text-anchor="middle">checks the URL</text>
+  <rect class="box" x="540" y="48" width="160" height="50" rx="6"/>
+  <text class="t" x="620" y="70" text-anchor="middle">Postgres</text>
+  <text class="s" x="620" y="88" text-anchor="middle">stores every link</text>
+  <line class="ln" x1="140" y1="62" x2="250" y2="62" marker-end="url(#a)"/>
+  <text class="lbl" x="195" y="55" text-anchor="middle">POST /shorten</text>
+  <line class="ln" x1="390" y1="62" x2="540" y2="62" marker-end="url(#a)"/>
+  <text class="lbl" x="465" y="55" text-anchor="middle">save → id 61</text>
+  <line class="ln dash" x1="250" y1="86" x2="140" y2="86" marker-end="url(#a)"/>
+  <text class="lbl" x="195" y="116" text-anchor="middle">localhost:8000/Z</text>
+  <text class="s" x="320" y="116" text-anchor="start">id 61 in base62 = "Z"</text>
+
+  <line class="rule" x1="20" y1="140" x2="700" y2="140"/>
+
+  <!-- 2. open -->
+  <text class="lane" x="20" y="168">2 · OPEN THE SHORT LINK</text>
+  <rect class="box" x="20" y="200" width="120" height="50" rx="6"/>
+  <text class="t" x="80" y="230" text-anchor="middle">You</text>
+  <rect class="box" x="250" y="200" width="140" height="50" rx="6"/>
+  <text class="t" x="320" y="222" text-anchor="middle">API</text>
+  <text class="s" x="320" y="240" text-anchor="middle">Z → id 61</text>
+  <rect class="box" x="540" y="186" width="160" height="50" rx="6"/>
+  <text class="t" x="620" y="208" text-anchor="middle">Redis</text>
+  <text class="s" x="620" y="226" text-anchor="middle">fast cache (copies)</text>
+  <rect class="key" x="540" y="296" width="160" height="50" rx="6"/>
+  <text class="t" x="620" y="318" text-anchor="middle">Postgres</text>
+  <text class="s" x="620" y="336" text-anchor="middle">always has the answer</text>
+  <rect class="box" x="20" y="320" width="120" height="50" rx="6"/>
+  <text class="t" x="80" y="342" text-anchor="middle">Original</text>
+  <text class="t" x="80" y="360" text-anchor="middle">website</text>
+
+  <line class="ln" x1="140" y1="214" x2="250" y2="214" marker-end="url(#a)"/>
+  <text class="lbl" x="195" y="207" text-anchor="middle">GET /Z</text>
+  <line class="ln" x1="390" y1="212" x2="540" y2="212" marker-end="url(#a)"/>
+  <text class="lbl" x="465" y="205" text-anchor="middle">1. look in cache</text>
+  <line class="ln acc" x1="390" y1="240" x2="540" y2="312" marker-end="url(#b)"/>
+  <text class="lbl" x="395" y="304" style="fill:#C2410C">2. not there?</text>
+  <text class="lbl" x="395" y="320" style="fill:#C2410C">ask Postgres</text>
+  <line class="ln dash" x1="620" y1="296" x2="620" y2="236" marker-end="url(#a)"/>
+  <text class="s" x="628" y="270">keeps a copy</text>
+  <text class="s" x="628" y="284">for next time</text>
+  <line class="ln dash" x1="250" y1="238" x2="140" y2="238" marker-end="url(#a)"/>
+  <text class="lbl" x="195" y="266" text-anchor="middle">3. 302 redirect</text>
+  <line class="ln" x1="80" y1="250" x2="80" y2="320" marker-end="url(#a)"/>
+  <text class="s" x="88" y="298">browser follows</text>
+</svg>

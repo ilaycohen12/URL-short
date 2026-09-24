@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 390" width="760" height="390" role="img" aria-label="Two ways to run the same app. Docker Compose: localhost:8000 goes to the api container, which talks to postgres and redis containers; Postgres data is in a volume. Kubernetes on kind: localhost:8000 goes to a Service, which sends traffic only to ready api pods; the api pod talks to postgres and redis pods; Postgres data is in a PVC. The whole Kubernetes cluster runs inside one Docker container.">
+  <style>
+    .bg { fill: #FFFFFF; stroke: #D0D7DE; }
+    .box { fill: #F6F8FA; stroke: #1F2328; stroke-width: 1.2; }
+    .data { fill: #FFF4ED; stroke: #C2410C; stroke-width: 1.6; }
+    .zone { fill: none; stroke: #59636E; stroke-width: 1.2; stroke-dasharray: 6 4; }
+    .h { font: 600 15px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1F2328; }
+    .t { font: 600 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1F2328; }
+    .s { font: 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #59636E; }
+    .ln { stroke: #1F2328; stroke-width: 1.4; fill: none; }
+    .sep { stroke: #D0D7DE; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#1F2328"/></marker>
+  </defs>
+  <rect class="bg" x="0.5" y="0.5" width="759" height="389" rx="8"/>
+  <line class="sep" x1="380" y1="16" x2="380" y2="374"/>
+
+  <!-- Compose -->
+  <text class="h" x="190" y="30" text-anchor="middle">Docker Compose</text>
+  <rect class="box" x="115" y="46" width="150" height="34" rx="6"/>
+  <text class="t" x="190" y="68" text-anchor="middle">localhost:8000</text>
+  <line class="ln" x1="190" y1="80" x2="190" y2="140" marker-end="url(#a)"/>
+  <rect class="box" x="115" y="140" width="150" height="40" rx="6"/>
+  <text class="t" x="190" y="165" text-anchor="middle">api</text>
+  <line class="ln" x1="160" y1="180" x2="105" y2="222" marker-end="url(#a)"/>
+  <line class="ln" x1="220" y1="180" x2="275" y2="222" marker-end="url(#a)"/>
+  <rect class="box" x="40" y="222" width="130" height="40" rx="6"/>
+  <text class="t" x="105" y="247" text-anchor="middle">postgres</text>
+  <rect class="box" x="210" y="222" width="130" height="40" rx="6"/>
+  <text class="t" x="275" y="247" text-anchor="middle">redis</text>
+  <line class="ln" x1="105" y1="262" x2="105" y2="304" marker-end="url(#a)"/>
+  <rect class="data" x="40" y="304" width="130" height="40" rx="6"/>
+  <text class="t" x="105" y="329" text-anchor="middle">data volume</text>
+  <text class="s" x="275" y="290" text-anchor="middle">cache only,</text>
+  <text class="s" x="275" y="305" text-anchor="middle">no storage</text>
+  <text class="s" x="190" y="370" text-anchor="middle">3 containers on one Docker network</text>
+
+  <!-- Kubernetes -->
+  <text class="h" x="570" y="30" text-anchor="middle">Kubernetes (kind)</text>
+  <rect class="box" x="495" y="46" width="150" height="34" rx="6"/>
+  <text class="t" x="570" y="68" text-anchor="middle">localhost:8000</text>
+  <rect class="zone" x="400" y="98" width="340" height="258" rx="8"/>
+  <line class="ln" x1="570" y1="80" x2="570" y2="110" marker-end="url(#a)"/>
+  <rect class="box" x="495" y="110" width="150" height="34" rx="6"/>
+  <text class="t" x="570" y="132" text-anchor="middle">Service</text>
+  <line class="ln" x1="570" y1="144" x2="570" y2="176" marker-end="url(#a)"/>
+  <text class="s" x="578" y="165">ready pods only</text>
+  <rect class="box" x="495" y="176" width="150" height="34" rx="6"/>
+  <text class="t" x="570" y="198" text-anchor="middle">api pod</text>
+  <line class="ln" x1="540" y1="210" x2="485" y2="236" marker-end="url(#a)"/>
+  <line class="ln" x1="600" y1="210" x2="655" y2="236" marker-end="url(#a)"/>
+  <rect class="box" x="420" y="236" width="130" height="34" rx="6"/>
+  <text class="t" x="485" y="258" text-anchor="middle">postgres pod</text>
+  <rect class="box" x="590" y="236" width="130" height="34" rx="6"/>
+  <text class="t" x="655" y="258" text-anchor="middle">redis pod</text>
+  <line class="ln" x1="485" y1="270" x2="485" y2="300" marker-end="url(#a)"/>
+  <rect class="data" x="420" y="300" width="130" height="40" rx="6"/>
+  <text class="t" x="485" y="325" text-anchor="middle">data (PVC)</text>
+  <text class="s" x="655" y="294" text-anchor="middle">cache only,</text>
+  <text class="s" x="655" y="309" text-anchor="middle">no storage</text>
+  <text class="s" x="570" y="376" text-anchor="middle">the whole cluster runs inside one Docker container</text>
+</svg>

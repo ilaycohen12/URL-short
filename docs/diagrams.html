@@ -1,0 +1,506 @@
+<title>URL-short in Six Diagrams</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #EEF1F4;
+    --panel: #FFFFFF;
+    --ink: #1A2330;
+    --muted: #5C6B7C;
+    --line: #C3CCD6;
+    --accent: #C2410C;
+    --ok: #15803D;
+    --bad: #B91C1C;
+    --oktint: #DCEFE2;
+    --acctint: #FBE3D6;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151C; --panel: #18202A; --ink: #E3E8EE; --muted: #8A99AA; --line: #2E3A47;
+      --accent: #F08A4B; --ok: #4ADE80; --bad: #F87171; --oktint: #173726; --acctint: #3D2415;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151C; --panel: #18202A; --ink: #E3E8EE; --muted: #8A99AA; --line: #2E3A47;
+    --accent: #F08A4B; --ok: #4ADE80; --bad: #F87171; --oktint: #173726; --acctint: #3D2415;
+    color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+
+  header { display: grid; gap: 10px; padding-bottom: 28px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  h1 { font-family: var(--cond); font-weight: 600; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; margin: 0; text-wrap: balance; }
+  .intro { max-width: 65ch; margin: 0; color: var(--muted); }
+  nav ul { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  nav a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); font-size: 14px; }
+  nav a:hover { border-bottom-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  section { border-top: 1px solid var(--line); padding-block: 36px; display: grid; gap: 14px; scroll-margin-top: 16px; }
+  .concept { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0; }
+  h2 { font-family: var(--cond); font-weight: 600; font-size: 26px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  .lede { max-width: 68ch; margin: 0; }
+  code { font-family: var(--mono); font-size: .9em; }
+
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px 18px 14px; }
+  .scroll { overflow-x: auto; }
+  figcaption { margin-top: 12px; font-size: 14px; color: var(--muted); max-width: 78ch; }
+  footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 13px; color: var(--muted); }
+
+  /* ---- diagram vocabulary (inline SVG) ---- */
+  .dg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--ink); font-family: var(--mono); font-size: 12px; }
+  .dg text { fill: currentColor; }
+  .dg .t { font-family: var(--sans); font-weight: 600; font-size: 13px; }
+  .dg .s { fill: var(--muted); font-size: 11px; }
+  .dg .sec { font-family: var(--sans); font-size: 11px; letter-spacing: .1em; fill: var(--muted); }
+  .dg .cmd { font-family: var(--mono); font-weight: 500; font-size: 12px; }
+  .dg .acct { fill: var(--accent); }
+  .dg .badt { fill: var(--bad); }
+  .dg .lbl { paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+  .dg .box { fill: var(--panel); stroke: currentColor; stroke-width: 1.2; }
+  .dg .note { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+  .dg .key { stroke: var(--accent); stroke-width: 2; }
+  .dg .badbox { stroke: var(--bad); stroke-dasharray: 5 4; }
+  .dg .zone { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 6 4; }
+  .dg .life { stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+  .dg .rule { stroke: var(--line); stroke-width: 1; }
+  .dg .ln { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  .dg .dash { stroke-dasharray: 5 4; }
+  .dg .accl { stroke: var(--accent); stroke-width: 1.6; }
+  .dg .badl { stroke: var(--bad); }
+  .dg .ah { fill: currentColor; }
+  .dg .ah-acc { fill: var(--accent); }
+  .dg .ah-bad { fill: var(--bad); }
+  .dg .okfill { fill: var(--oktint); stroke: var(--ok); stroke-width: 1; }
+  .dg .accfill { fill: var(--acctint); stroke: var(--accent); stroke-width: 1; }
+  .dg .okbar { fill: var(--ok); }
+  .dg .accbar { fill: var(--accent); }
+  .dg .waitbar { fill: var(--muted); }
+
+  @media (max-width: 600px) {
+    h2 { font-size: 22px; }
+    figure { padding: 12px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">URL-short · DevOps practical assignment</p>
+    <h1>URL-short in six diagrams</h1>
+    <p class="intro">One mechanism per picture: how a request moves, where each part runs, how Kubernetes decides a pod can take traffic, how a rollback stays in git, where the data lives, and what CI proves on every push. Everything here matches the repo at commit <code>462d3a6</code>.</p>
+    <nav aria-label="Diagrams">
+      <ul>
+        <li><a href="#request-flow">Request flow</a></li>
+        <li><a href="#topology">Compose vs Kubernetes</a></li>
+        <li><a href="#probes">Probes</a></li>
+        <li><a href="#rollback">Rollback and drift</a></li>
+        <li><a href="#persistence">Where the data lives</a></li>
+        <li><a href="#ci">CI pipeline</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <!-- 1. Request flow -->
+  <section id="request-flow">
+    <p class="concept">Cache-aside · base62 codes</p>
+    <h2>How a request moves through the API, Redis and Postgres</h2>
+    <p class="lede">Creating a link only touches Postgres. Opening one asks Redis first and falls back to Postgres on a miss, or when Redis is down. Postgres always has the answer; Redis only has copies.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 860 575" role="img" aria-label="Sequence diagram. Create: the API validates the URL, inserts it into Postgres, gets id 61 and returns code Z. Open: the API decodes Z to 61, asks Redis; on a hit it redirects, on a miss or when Redis is down it selects from Postgres, caches the result best-effort and redirects with 302.">
+          <defs>
+            <marker id="d1a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah" d="M0,0L10,5L0,10z"/></marker>
+            <marker id="d1b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah-acc" d="M0,0L10,5L0,10z"/></marker>
+          </defs>
+          <!-- participants -->
+          <rect class="box" x="25" y="16" width="150" height="44" rx="4"/>
+          <text class="t" x="100" y="35" text-anchor="middle">Client</text>
+          <text class="s" x="100" y="51" text-anchor="middle">browser or curl</text>
+          <rect class="box" x="245" y="16" width="150" height="44" rx="4"/>
+          <text class="t" x="320" y="35" text-anchor="middle">API</text>
+          <text class="s" x="320" y="51" text-anchor="middle">FastAPI</text>
+          <rect class="box" x="485" y="16" width="150" height="44" rx="4"/>
+          <text class="t" x="560" y="35" text-anchor="middle">Redis</text>
+          <text class="s" x="560" y="51" text-anchor="middle">cache (copies)</text>
+          <rect class="box key" x="695" y="16" width="150" height="44" rx="4"/>
+          <text class="t" x="770" y="35" text-anchor="middle">Postgres</text>
+          <text class="s" x="770" y="51" text-anchor="middle">source of truth</text>
+          <!-- lifelines -->
+          <line class="life" x1="100" y1="60" x2="100" y2="562"/>
+          <line class="life" x1="320" y1="60" x2="320" y2="562"/>
+          <line class="life" x1="560" y1="60" x2="560" y2="562"/>
+          <line class="life" x1="770" y1="60" x2="770" y2="562"/>
+
+          <!-- create -->
+          <text class="sec" x="16" y="92">CREATE A LINK</text>
+          <line class="ln" x1="100" y1="118" x2="320" y2="118" marker-end="url(#d1a)"/>
+          <text class="lbl" x="210" y="111" text-anchor="middle">POST /shorten {url}</text>
+          <rect class="note" x="330" y="130" width="150" height="40" rx="3"/>
+          <text class="s" x="340" y="146">validate the URL</text>
+          <text class="s" x="340" y="162">bad → 422</text>
+          <line class="ln" x1="320" y1="196" x2="770" y2="196" marker-end="url(#d1a)"/>
+          <text class="lbl" x="545" y="189" text-anchor="middle">INSERT url → id 61</text>
+          <line class="ln dash" x1="770" y1="224" x2="320" y2="224" marker-end="url(#d1a)"/>
+          <text class="lbl" x="545" y="217" text-anchor="middle">id 61</text>
+          <rect class="note" x="330" y="236" width="170" height="24" rx="3"/>
+          <text class="s" x="340" y="252">61 → base62 → "Z"</text>
+          <line class="ln dash" x1="320" y1="286" x2="100" y2="286" marker-end="url(#d1a)"/>
+          <text class="lbl" x="210" y="279" text-anchor="middle">200 {short_code: "Z"}</text>
+
+          <line class="rule" x1="16" y1="306" x2="844" y2="306"/>
+
+          <!-- open -->
+          <text class="sec" x="16" y="330">OPEN A LINK</text>
+          <line class="ln" x1="100" y1="352" x2="320" y2="352" marker-end="url(#d1a)"/>
+          <text class="lbl" x="210" y="345" text-anchor="middle">GET /Z</text>
+          <rect class="note" x="330" y="364" width="215" height="24" rx="3"/>
+          <text class="s" x="340" y="380">decode "Z" → id 61 (bad → 404)</text>
+          <line class="ln" x1="320" y1="414" x2="560" y2="414" marker-end="url(#d1a)"/>
+          <text class="lbl" x="440" y="407" text-anchor="middle">GET url:Z</text>
+          <line class="ln dash" x1="560" y1="442" x2="320" y2="442" marker-end="url(#d1a)"/>
+          <text class="lbl" x="440" y="435" text-anchor="middle">hit → URL</text>
+          <line class="ln accl" x1="320" y1="472" x2="770" y2="472" marker-end="url(#d1b)"/>
+          <text class="lbl acct" x="545" y="465" text-anchor="middle">miss, or Redis down → SELECT id 61</text>
+          <line class="ln dash" x1="770" y1="500" x2="320" y2="500" marker-end="url(#d1a)"/>
+          <text class="lbl" x="545" y="493" text-anchor="middle">URL (no row → 404)</text>
+          <line class="ln" x1="320" y1="526" x2="560" y2="526" marker-end="url(#d1a)"/>
+          <text class="lbl" x="440" y="519" text-anchor="middle">SET url:Z (best effort)</text>
+          <line class="ln dash" x1="320" y1="552" x2="100" y2="552" marker-end="url(#d1a)"/>
+          <text class="lbl" x="210" y="545" text-anchor="middle">302 Location: URL</text>
+        </svg>
+      </div>
+      <figcaption>The orange hop is what makes Redis optional: a cache miss and a Redis outage take the same path to Postgres (Redis calls time out after 1s). The short code is never stored; it's the row id written in base62, so row 61 is always <code>Z</code>.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 2. Topology -->
+  <section id="topology">
+    <p class="concept">Docker Compose · Kubernetes · networking</p>
+    <h2>The same three parts, run two ways</h2>
+    <p class="lede">Both setups serve the API on <code>localhost:8000</code> and keep Postgres data outside the database process. Kubernetes adds two hops in front of the API, and the second one only forwards to pods that pass their readiness check.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 900 425" role="img" aria-label="Side by side. Compose: port 8000 maps straight to the api container, which reaches postgres and redis containers by service name; Postgres data is in a named volume. Kind: port 8000 maps to node port 30080, a NodePort Service forwards only to ready api pods, pods reach postgres and redis through Services, and Postgres data is a PVC folder on the node's disk.">
+          <defs>
+            <marker id="d2a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah" d="M0,0L10,5L0,10z"/></marker>
+            <marker id="d2b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah-acc" d="M0,0L10,5L0,10z"/></marker>
+          </defs>
+          <text class="t" x="20" y="28">Docker Compose · Part 1</text>
+          <text class="t" x="470" y="28">Kubernetes on kind · Part 2</text>
+          <line class="life" x1="450" y1="12" x2="450" y2="415"/>
+
+          <!-- compose -->
+          <rect class="box" x="145" y="44" width="160" height="40" rx="4"/>
+          <text class="t" x="225" y="61" text-anchor="middle">your machine</text>
+          <text class="s" x="225" y="76" text-anchor="middle">localhost:8000</text>
+          <line class="ln" x1="225" y1="84" x2="225" y2="214" marker-end="url(#d2a)"/>
+          <text class="s" x="233" y="152">ports 8000:8000</text>
+          <rect class="box" x="150" y="214" width="150" height="40" rx="4"/>
+          <text class="t" x="225" y="231" text-anchor="middle">api container</text>
+          <text class="s" x="225" y="246" text-anchor="middle">uvicorn :8000</text>
+          <line class="ln" x1="190" y1="254" x2="120" y2="290" marker-end="url(#d2a)"/>
+          <line class="ln" x1="260" y1="254" x2="330" y2="290" marker-end="url(#d2a)"/>
+          <text class="s" x="140" y="268" text-anchor="end">postgres:5432</text>
+          <text class="s" x="300" y="268">redis:6379</text>
+          <rect class="box" x="40" y="290" width="160" height="40" rx="4"/>
+          <text class="t" x="120" y="307" text-anchor="middle">postgres container</text>
+          <text class="s" x="120" y="322" text-anchor="middle">postgres:16</text>
+          <rect class="box" x="250" y="290" width="160" height="40" rx="4"/>
+          <text class="t" x="330" y="307" text-anchor="middle">redis container</text>
+          <text class="s" x="330" y="322" text-anchor="middle">redis:7</text>
+          <line class="ln" x1="120" y1="330" x2="120" y2="360" marker-end="url(#d2a)"/>
+          <text class="s" x="128" y="349">mounts</text>
+          <rect class="box key" x="40" y="360" width="160" height="40" rx="4"/>
+          <text class="t" x="120" y="377" text-anchor="middle">postgres_data</text>
+          <text class="s" x="120" y="392" text-anchor="middle">named volume</text>
+          <text class="s" x="330" y="352" text-anchor="middle">no volume: cache only</text>
+
+          <!-- kind -->
+          <rect class="box" x="595" y="44" width="160" height="40" rx="4"/>
+          <text class="t" x="675" y="61" text-anchor="middle">your machine</text>
+          <text class="s" x="675" y="76" text-anchor="middle">localhost:8000</text>
+          <rect class="zone" x="478" y="132" width="397" height="280" rx="6"/>
+          <text class="s" x="490" y="404">kind node = one Docker container</text>
+          <line class="ln" x1="675" y1="84" x2="675" y2="150" marker-end="url(#d2a)"/>
+          <text class="s" x="683" y="106">hostPort 8000</text>
+          <text class="s" x="683" y="120">→ node port 30080</text>
+          <rect class="box" x="600" y="150" width="150" height="40" rx="4"/>
+          <text class="t" x="675" y="167" text-anchor="middle">Service api</text>
+          <text class="s" x="675" y="182" text-anchor="middle">NodePort 30080</text>
+          <line class="ln accl" x1="675" y1="190" x2="675" y2="214" marker-end="url(#d2b)"/>
+          <text class="s acct" x="683" y="207">ready pods only</text>
+          <rect class="box" x="600" y="214" width="150" height="40" rx="4"/>
+          <text class="t" x="675" y="231" text-anchor="middle">api pod</text>
+          <text class="s" x="675" y="246" text-anchor="middle">:8000 · 3 probes</text>
+          <line class="ln" x1="640" y1="254" x2="580" y2="290" marker-end="url(#d2a)"/>
+          <line class="ln" x1="710" y1="254" x2="770" y2="290" marker-end="url(#d2a)"/>
+          <text class="s" x="606" y="268" text-anchor="end">postgres:5432</text>
+          <text class="s" x="744" y="268">redis:6379</text>
+          <rect class="box" x="500" y="290" width="160" height="40" rx="4"/>
+          <text class="t" x="580" y="307" text-anchor="middle">postgres pod</text>
+          <text class="s" x="580" y="322" text-anchor="middle">via Service postgres</text>
+          <rect class="box" x="690" y="290" width="160" height="40" rx="4"/>
+          <text class="t" x="770" y="307" text-anchor="middle">redis pod</text>
+          <text class="s" x="770" y="322" text-anchor="middle">via Service redis</text>
+          <line class="ln" x1="580" y1="330" x2="580" y2="352" marker-end="url(#d2a)"/>
+          <text class="s" x="588" y="345">mounts</text>
+          <rect class="box key" x="500" y="352" width="160" height="40" rx="4"/>
+          <text class="t" x="580" y="369" text-anchor="middle">postgres-pvc · 1Gi</text>
+          <text class="s" x="580" y="384" text-anchor="middle">folder on node's disk</text>
+          <text class="s" x="770" y="352" text-anchor="middle">no PVC: cache only</text>
+        </svg>
+      </div>
+      <figcaption>In Compose the containers find each other by service name on one Docker network. In Kubernetes they go through Services, and the API's Service is the gate: a pod that fails readiness keeps running but stops receiving traffic. Only one setup can run at a time, because both bind port 8000.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 3. Probes -->
+  <section id="probes">
+    <p class="concept">Startup · readiness · liveness probes</p>
+    <h2>How Kubernetes decides the API can take traffic</h2>
+    <p class="lede">Three checks, three different consequences. Startup gives a slow start time to finish. Readiness removes the pod from traffic. Liveness restarts it. Only readiness looks at the database, so a Postgres outage pulls the pod out of service but never restarts it.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 880 322" role="img" aria-label="Timeline of an API pod: starting, in service, Postgres down, in service again. The startup probe runs only while starting. Readiness on /health passes while in service and fails while Postgres is down, which removes the pod from traffic without restarting it. Liveness on /live passes the whole time.">
+          <!-- phase band -->
+          <rect class="note" x="160" y="36" width="150" height="46" rx="3"/>
+          <text class="t" x="235" y="55" text-anchor="middle">starting</text>
+          <text class="s" x="235" y="71" text-anchor="middle">waits for DB / DNS</text>
+          <rect class="okfill" x="310" y="36" width="230" height="46"/>
+          <text class="t" x="425" y="55" text-anchor="middle">in service</text>
+          <text class="s" x="425" y="71" text-anchor="middle">/health → 200</text>
+          <rect class="accfill" x="540" y="36" width="160" height="46"/>
+          <text class="t" x="620" y="55" text-anchor="middle">Postgres down</text>
+          <text class="s" x="620" y="71" text-anchor="middle">/health → 503</text>
+          <rect class="okfill" x="700" y="36" width="160" height="46" rx="3"/>
+          <text class="t" x="780" y="55" text-anchor="middle">in service again</text>
+          <text class="s" x="780" y="71" text-anchor="middle">/health → 200</text>
+
+          <!-- startup -->
+          <text class="t" x="16" y="118">startupProbe</text>
+          <text class="s" x="16" y="134">/live · 5s × 30</text>
+          <rect class="waitbar" x="160" y="110" width="150" height="14" rx="2"/>
+          <text class="s" x="320" y="121">passes once → hands over to the other two</text>
+
+          <!-- readiness -->
+          <text class="t" x="16" y="184">readinessProbe</text>
+          <text class="s" x="16" y="200">/health · every 5s</text>
+          <line class="life" x1="160" y1="183" x2="310" y2="183"/>
+          <text class="s" x="235" y="172" text-anchor="middle">paused</text>
+          <rect class="okbar" x="310" y="176" width="230" height="14"/>
+          <rect class="accbar" x="540" y="176" width="160" height="14"/>
+          <rect class="okbar" x="700" y="176" width="160" height="14"/>
+          <text class="s acct" x="620" y="210" text-anchor="middle">fails → no traffic, not restarted</text>
+
+          <!-- liveness -->
+          <text class="t" x="16" y="250">livenessProbe</text>
+          <text class="s" x="16" y="266">/live · every 10s</text>
+          <line class="life" x1="160" y1="249" x2="310" y2="249"/>
+          <text class="s" x="235" y="238" text-anchor="middle">paused</text>
+          <rect class="okbar" x="310" y="242" width="550" height="14"/>
+          <text class="s" x="585" y="276" text-anchor="middle">always passes: /live checks nothing outside the process</text>
+
+          <!-- legend -->
+          <rect class="okbar" x="160" y="298" width="14" height="10"/>
+          <text class="s" x="180" y="307">passing</text>
+          <rect class="accbar" x="250" y="298" width="14" height="10"/>
+          <text class="s" x="270" y="307">failing</text>
+          <line class="life" x1="340" y1="303" x2="364" y2="303"/>
+          <text class="s" x="372" y="307">paused</text>
+          <rect class="waitbar" x="440" y="298" width="14" height="10"/>
+          <text class="s" x="460" y="307">starting up</text>
+        </svg>
+      </div>
+      <figcaption>If Redis goes down instead, <code>/health</code> stays 200 with <code>"status": "degraded"</code>, so the pod stays in service and serves from Postgres. Before the startup probe was added, liveness began after 10s, and a slow start after a cluster restart got the API killed while it was still waiting for DNS.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 4. Rollback and drift -->
+  <section id="rollback">
+    <p class="concept">GitOps by hand · drift detection</p>
+    <h2>Rolling back through git, and catching what went around it</h2>
+    <p class="lede">Every change, a rollback included, starts in <code>values.yaml</code>; <code>setup-k8s</code> then makes the cluster match. Two commands can change the cluster without touching git. <code>check-drift</code> compares git against both places they write to.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 900 370" role="img" aria-label="git revert edits values.yaml; setup-k8s reads it and runs helm upgrade, which records a Helm release and applies live objects. helm rollback or --set changes the release record without git; kubectl set image or edit changes live objects without git or Helm. check-drift renders values.yaml and compares it with the release record (check 1) and with the live objects (check 2).">
+          <defs>
+            <marker id="d4a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah" d="M0,0L10,5L0,10z"/></marker>
+            <marker id="d4b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah-acc" d="M0,0L10,5L0,10z"/></marker>
+            <marker id="d4c" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah-bad" d="M0,0L10,5L0,10z"/></marker>
+          </defs>
+          <!-- main path -->
+          <rect class="box" x="20" y="143" width="160" height="44" rx="4"/>
+          <text class="t" x="100" y="161" text-anchor="middle">git revert &lt;sha&gt;</text>
+          <text class="s" x="100" y="177" text-anchor="middle">rollback = new commit</text>
+          <line class="ln" x1="180" y1="165" x2="235" y2="165" marker-end="url(#d4a)"/>
+          <text class="s lbl" x="207" y="157" text-anchor="middle">edits</text>
+          <rect class="box key" x="235" y="143" width="170" height="44" rx="4"/>
+          <text class="t" x="320" y="161" text-anchor="middle">values.yaml in git</text>
+          <text class="s" x="320" y="177" text-anchor="middle">source of truth</text>
+          <line class="ln" x1="405" y1="165" x2="460" y2="165" marker-end="url(#d4a)"/>
+          <text class="s lbl" x="432" y="157" text-anchor="middle">reads</text>
+          <rect class="box" x="460" y="143" width="150" height="44" rx="4"/>
+          <text class="t" x="535" y="161" text-anchor="middle">setup-k8s</text>
+          <text class="s" x="535" y="177" text-anchor="middle">helm upgrade --install</text>
+
+          <line class="ln" x1="610" y1="156" x2="680" y2="128" marker-end="url(#d4a)"/>
+          <text class="s lbl" x="640" y="134" text-anchor="end">records</text>
+          <line class="ln" x1="610" y1="176" x2="680" y2="246" marker-end="url(#d4a)"/>
+          <text class="s lbl" x="640" y="222" text-anchor="end">applies</text>
+
+          <rect class="box" x="680" y="100" width="200" height="44" rx="4"/>
+          <text class="t" x="780" y="118" text-anchor="middle">Helm release record</text>
+          <text class="s" x="780" y="134" text-anchor="middle">helm get manifest</text>
+          <rect class="box" x="680" y="230" width="200" height="44" rx="4"/>
+          <text class="t" x="780" y="248" text-anchor="middle">Live cluster objects</text>
+          <text class="s" x="780" y="264" text-anchor="middle">what actually runs</text>
+
+          <!-- bypasses -->
+          <rect class="box badbox" x="680" y="16" width="200" height="40" rx="4"/>
+          <text class="t" x="780" y="33" text-anchor="middle">helm rollback / --set</text>
+          <text class="s badt" x="780" y="48" text-anchor="middle">skips values.yaml</text>
+          <line class="ln badl dash" x1="780" y1="56" x2="780" y2="100" marker-end="url(#d4c)"/>
+          <rect class="box badbox" x="680" y="316" width="200" height="40" rx="4"/>
+          <text class="t" x="780" y="333" text-anchor="middle">kubectl set image / edit</text>
+          <text class="s badt" x="780" y="348" text-anchor="middle">skips git and Helm</text>
+          <line class="ln badl dash" x1="780" y1="316" x2="780" y2="274" marker-end="url(#d4c)"/>
+
+          <!-- drift check -->
+          <rect class="box" x="250" y="282" width="250" height="50" rx="4"/>
+          <text class="t" x="375" y="302" text-anchor="middle">check-drift.sh</text>
+          <text class="s" x="375" y="319" text-anchor="middle">exit 0 = in sync · 1 = drift</text>
+          <line class="ln dash" x1="320" y1="282" x2="320" y2="187" marker-end="url(#d4a)"/>
+          <text class="s lbl" x="328" y="240">renders (helm template)</text>
+          <polyline class="ln accl dash" points="500,297 645,297 645,122 680,122" marker-end="url(#d4b)"/>
+          <text class="s acct lbl" x="572" y="290" text-anchor="middle">1 · release vs git</text>
+          <polyline class="ln accl dash" points="500,317 660,317 660,252 680,252" marker-end="url(#d4b)"/>
+          <text class="s acct lbl" x="636" y="348" text-anchor="end">2 · live vs git (kubectl diff)</text>
+        </svg>
+      </div>
+      <figcaption>Check 1 catches <code>helm rollback</code> and <code>--set</code>. Check 2 catches <code>kubectl</code> edits, which Helm never sees. To fix any drift, make git say what you want and run <code>setup-k8s</code>; it overwrites manual changes. Nothing blocks the red paths. Blocking them is what a GitOps controller such as ArgoCD would add.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 5. Persistence -->
+  <section id="persistence">
+    <p class="concept">Volumes · PVCs · stop vs reset</p>
+    <h2>Where Postgres data lives, and which command deletes it</h2>
+    <p class="lede">In both setups the data sits outside the Postgres process, so replacing the database container or pod is safe. What differs is how much a "stop" takes with it: in kind, the data is on the node container's own disk.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 900 355" role="img" aria-label="Compose: compose down removes the postgres container and keeps the postgres_data volume; compose down -v also deletes the volume. Kind: deleting the postgres pod keeps the PVC; stop-k8s stops the node container and keeps its disk; teardown-k8s deletes the node container and its disk, so the data is gone.">
+          <defs>
+            <marker id="d5a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah" d="M0,0L10,5L0,10z"/></marker>
+          </defs>
+          <text class="t" x="20" y="28">Docker Compose</text>
+          <text class="t" x="440" y="28">Kubernetes on kind</text>
+          <line class="life" x1="420" y1="12" x2="420" y2="345"/>
+
+          <!-- compose -->
+          <text class="cmd" x="20" y="88">compose down</text>
+          <text class="s" x="20" y="104">container gone · data kept</text>
+          <line class="ln" x1="196" y1="92" x2="230" y2="92" marker-end="url(#d5a)"/>
+          <rect class="box" x="230" y="70" width="170" height="44" rx="4"/>
+          <text class="t" x="315" y="88" text-anchor="middle">postgres container</text>
+          <text class="s" x="315" y="104" text-anchor="middle">replaceable</text>
+          <line class="ln" x1="315" y1="114" x2="315" y2="190" marker-end="url(#d5a)"/>
+          <text class="s" x="323" y="156">mounts</text>
+          <text class="cmd" x="20" y="208">compose down -v</text>
+          <text class="s badt" x="20" y="224">volume deleted → reset</text>
+          <line class="ln" x1="196" y1="212" x2="230" y2="212" marker-end="url(#d5a)"/>
+          <rect class="box key" x="230" y="190" width="170" height="44" rx="4"/>
+          <text class="t" x="315" y="208" text-anchor="middle">postgres_data</text>
+          <text class="s" x="315" y="224" text-anchor="middle">named volume = the data</text>
+
+          <!-- kind -->
+          <rect class="zone" x="640" y="50" width="240" height="290" rx="6"/>
+          <text class="t" x="652" y="72">node container</text>
+          <text class="s" x="652" y="88">url-short-control-plane</text>
+          <rect class="box" x="665" y="102" width="190" height="40" rx="4"/>
+          <text class="t" x="760" y="119" text-anchor="middle">postgres pod</text>
+          <text class="s" x="760" y="134" text-anchor="middle">recreated if deleted</text>
+          <line class="ln" x1="760" y1="142" x2="760" y2="232" marker-end="url(#d5a)"/>
+          <text class="s" x="768" y="186">mounts</text>
+          <rect class="zone" x="655" y="198" width="210" height="126" rx="4"/>
+          <text class="s" x="667" y="216">node's disk</text>
+          <rect class="box key" x="675" y="232" width="170" height="44" rx="4"/>
+          <text class="t" x="760" y="250" text-anchor="middle">postgres-pvc</text>
+          <text class="s" x="760" y="266" text-anchor="middle">folder = the data</text>
+
+          <text class="cmd" x="440" y="118">kubectl delete pod</text>
+          <text class="s" x="440" y="134">new pod · data kept</text>
+          <line class="ln" x1="608" y1="122" x2="665" y2="122" marker-end="url(#d5a)"/>
+          <text class="cmd" x="440" y="196">stop-k8s</text>
+          <text class="s" x="440" y="212">node stopped · disk kept</text>
+          <line class="ln" x1="608" y1="200" x2="640" y2="200" marker-end="url(#d5a)"/>
+          <text class="cmd" x="440" y="292">teardown-k8s</text>
+          <text class="s badt" x="440" y="308">node deleted · data gone</text>
+          <line class="ln" x1="608" y1="296" x2="640" y2="296" marker-end="url(#d5a)"/>
+        </svg>
+      </div>
+      <figcaption><code>stop-k8s</code> and <code>teardown-k8s</code> mirror <code>compose down</code> and <code>down -v</code>. After a stop and start, the dashboard's traffic counters read 0 because they live in the API's memory; <strong>Links stored</strong> is counted from Postgres and stays put.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 6. CI -->
+  <section id="ci">
+    <p class="concept">GitHub Actions</p>
+    <h2>What runs on every push</h2>
+    <p class="lede">A fast job checks the code first. Only if it passes do the slower jobs start a real Compose stack and two real Kubernetes clusters, using the same scripts a tester runs.</p>
+    <figure>
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 900 305" role="img" aria-label="A push or pull request starts the checks job: ruff, pytest, helm lint and docker build. If it passes, two jobs start: compose on a fresh checkout without .env with a smoke test and Redis outage, and e2e on kind run twice for Helm 3 and Helm 4 with setup, smoke test, drift check, outages and a stop and start. The result is a pass or fail mark on the commit.">
+          <defs>
+            <marker id="d6a" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah" d="M0,0L10,5L0,10z"/></marker>
+            <marker id="d6b" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path class="ah-acc" d="M0,0L10,5L0,10z"/></marker>
+          </defs>
+          <rect class="box" x="20" y="128" width="130" height="50" rx="4"/>
+          <text class="t" x="85" y="149" text-anchor="middle">push or PR</text>
+          <text class="s" x="85" y="165" text-anchor="middle">to master</text>
+          <line class="ln" x1="150" y1="153" x2="200" y2="153" marker-end="url(#d6a)"/>
+
+          <rect class="box" x="200" y="88" width="200" height="130" rx="4"/>
+          <text class="t" x="300" y="110" text-anchor="middle">checks · ~40s</text>
+          <text class="s" x="216" y="136">ruff lint + format</text>
+          <text class="s" x="216" y="156">pytest · 34 tests</text>
+          <text class="s" x="216" y="176">helm lint + template</text>
+          <text class="s" x="216" y="196">docker build</text>
+
+          <line class="ln accl" x1="400" y1="128" x2="480" y2="82" marker-end="url(#d6b)"/>
+          <line class="ln accl" x1="400" y1="182" x2="480" y2="222" marker-end="url(#d6b)"/>
+          <text class="s acct" x="408" y="158">only if checks pass</text>
+
+          <rect class="box" x="480" y="24" width="230" height="104" rx="4"/>
+          <text class="t" x="595" y="46" text-anchor="middle">compose · ~1 min</text>
+          <text class="s" x="496" y="70">fresh checkout, no .env</text>
+          <text class="s" x="496" y="90">up --build → smoke test</text>
+          <text class="s" x="496" y="110">Redis outage</text>
+
+          <rect class="box" x="488" y="172" width="230" height="118" rx="4"/>
+          <rect class="box" x="480" y="164" width="230" height="118" rx="4"/>
+          <text class="t" x="595" y="186" text-anchor="middle">e2e on kind × 2 · ~2 min</text>
+          <text class="s" x="496" y="208">Helm 3.22 and Helm 4.2</text>
+          <text class="s" x="496" y="228">setup-k8s → smoke → drift</text>
+          <text class="s" x="496" y="248">Redis + Postgres outage</text>
+          <text class="s" x="496" y="268">stop/start: data kept</text>
+
+          <line class="ln" x1="710" y1="76" x2="770" y2="140" marker-end="url(#d6a)"/>
+          <line class="ln" x1="718" y1="222" x2="770" y2="166" marker-end="url(#d6a)"/>
+          <rect class="box" x="770" y="128" width="115" height="50" rx="4"/>
+          <text class="t" x="827" y="149" text-anchor="middle">✓ or ✗</text>
+          <text class="s" x="827" y="165" text-anchor="middle">on the commit</text>
+        </svg>
+      </div>
+      <figcaption>Because the end-to-end jobs call <code>setup-k8s.sh</code>, <code>smoke-test.sh</code> and <code>check-drift.sh</code>, a green run also proves the README's instructions still work. The Compose job runs the brief's exact command on a checkout with no <code>.env</code>.</figcaption>
+    </figure>
+  </section>
+
+  <footer>Drawn from <code>README.md</code>, <code>api/app/main.py</code>, <code>helm/url-short/values.yaml</code>, <code>scripts/</code> and <code>.github/workflows/ci.yml</code>.</footer>
+</div>
