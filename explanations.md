@@ -462,3 +462,29 @@ rolling update that includes the OLD pod, which is still Ready, so the wait can 
 new version even starts. `kubectl rollout status deployment/api` tracks the *rollout*: it waits
 until the new pods are ready and the old ones have been removed. Use it after anything that may
 change a Deployment.
+
+## GitHub Actions — how CI is put together
+
+A **workflow** is a YAML file in `.github/workflows/`. It lives in the repo, so it travels with the
+code: it runs in whichever GitHub repo an event happens in (yours for your pushes; a fork's for
+the fork's pushes). Nothing runs on anyone's laptop.
+- **`on:`** — the triggers: here `push` to `master`, `pull_request`, and `workflow_dispatch`
+  (a manual "Run workflow" button — also lets you run CI on any branch).
+- **Runner** — a fresh virtual machine GitHub starts for each job (`runs-on: ubuntu-latest`) and
+  throws away afterwards. Every run starts from zero, which is what makes CI trustworthy: "works
+  on my machine" leftovers can't hide problems.
+- **Job** — a group of steps on one runner. Jobs run in parallel unless one declares
+  **`needs:`** another; ours: `e2e` needs `checks`, so a lint/test failure skips the slow cluster.
+- **Step** — either a shell command (`run:`) or a reusable **action** (`uses: owner/repo@version`),
+  e.g. `actions/checkout` (gets the code), `azure/setup-helm` (installs Helm).
+- **Matrix** — run the same job with different inputs; ours runs e2e once per Helm version.
+  `fail-fast: false` lets both finish, so you see *which* version broke.
+- **`if: failure()`** — a step that only runs when an earlier one failed (our debug dump).
+- **`permissions`** — what the job's automatic GitHub token may do; `contents: read` = least
+  privilege. **`concurrency`** — cancels an older run when a newer push arrives.
+- **Cost** — free and unlimited on standard runners for public repos.
+
+**Lint vs unit tests vs end-to-end** — lint (`ruff`) reads code without running it (style,
+likely bugs); unit tests (`pytest`) run small pieces of logic in isolation, in milliseconds;
+end-to-end runs the whole deployed system the way a user would. Each catches what the others
+can't, and they're ordered cheapest-first.

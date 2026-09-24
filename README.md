@@ -1,5 +1,7 @@
 # URL Shortener — DevOps Practical Assignment
 
+[![CI](https://github.com/ilaycohen12/URL-short/actions/workflows/ci.yml/badge.svg)](https://github.com/ilaycohen12/URL-short/actions/workflows/ci.yml)
+
 A small URL shortener: an API that creates short links and redirects them, backed by
 PostgreSQL (source of truth) and Redis (cache). The same app is deployed two independent
 ways — Docker Compose (Part 1) and Kubernetes via Helm (Part 2) — with operational
@@ -13,12 +15,14 @@ visibility and a runbook on top (Part 3).
 | `docker-compose.yml`, `.env.example` | Part 1 |
 | `helm/url-short/` | Part 2 Helm chart — `values.yaml` is the single source of truth |
 | `k8s/kind-cluster.yaml` | Local kind cluster config (maps the API to `localhost:8000`) |
-| `scripts/` | One-command Kubernetes setup / stop / teardown / drift check (`.sh` + PowerShell `.ps1`) |
+| `scripts/` | One-command Kubernetes setup / stop / teardown / drift check / smoke test (`.sh` + PowerShell `.ps1`) |
 | `documentation.md` | Decision log — why each choice was made, every bug found |
 | `explanations.md` | Concept write-ups (cache-aside, base62, Helm, probes, …) |
 
 ```text
 URL-short/
+├── .github/workflows/
+│   └── ci.yml                 # CI: lint, tests, chart, build, end-to-end on kind
 ├── api/
 │   ├── app/
 │   │   ├── main.py            # FastAPI app: routes, metrics, exception handlers
@@ -29,8 +33,11 @@ URL-short/
 │   │   ├── config.py          # settings from environment variables
 │   │   ├── shortcode.py       # base62 encode/decode
 │   │   └── dashboard.py       # /dashboard HTML page
+│   ├── tests/                 # unit tests (pytest) - not copied into the image
 │   ├── Dockerfile
 │   ├── requirements.txt
+│   ├── requirements-dev.txt   # + pytest, ruff (CI / local dev only)
+│   ├── pyproject.toml         # ruff + pytest settings
 │   └── .dockerignore
 ├── helm/url-short/
 │   ├── Chart.yaml
@@ -43,6 +50,7 @@ URL-short/
 │   ├── setup-k8s.sh / .ps1       # create (or restart) the cluster + deploy
 │   ├── stop-k8s.sh / .ps1        # stop the cluster, keep data
 │   ├── check-drift.sh / .ps1     # does the cluster still match git?
+│   ├── smoke-test.sh / .ps1      # end-to-end check of a running deployment
 │   └── teardown-k8s.sh / .ps1    # delete the cluster and all data
 ├── docker-compose.yml
 ├── .env.example
@@ -61,7 +69,7 @@ Compose and Kubernetes are **two independent ways to run the same app**. Both se
 
 | | Docker Compose (Part 1) | Kubernetes (Part 2) |
 |---|---|---|
-| Needs | Docker with Compose | Docker, `kind`, `kubectl`, `helm` |
+| Needs | Docker with Compose | Docker, `kind`, `kubectl`, `helm` (v3 or v4) |
 | Start — Linux / macOS / Git Bash | `cp .env.example .env` then `docker compose up --build` | `bash scripts/setup-k8s.sh` |
 | Start — Windows PowerShell | `cp .env.example .env` then `docker compose up --build` | `.\scripts\setup-k8s.ps1` |
 | Stop, keep data — Linux / macOS / Git Bash | `docker compose down` | `bash scripts/stop-k8s.sh` |
@@ -373,6 +381,34 @@ assumption. See `documentation.md` for exactly how.
 
 ---
 
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `master` and every pull request
+— on GitHub's servers, nothing to run locally. Result: ✅/❌ next to each commit, logs in the
+**Actions** tab.
+
+| Job | What it does | Time |
+|---|---|---|
+| **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression) · `helm lint` + `helm template` · `docker build` | ~40s |
+| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
+
+The end-to-end job only starts if the first one passes, and it uses the **same scripts a tester
+runs** — so CI also proves the README's instructions work. On failure it prints pod status and
+logs. Verified it catches real bugs: changing the URL length check from `>` to `>=` turned the
+run red (`test_url_at_max_length_is_accepted FAILED`) and skipped the end-to-end job.
+
+**Run the same checks locally:**
+```bash
+cd api
+pip install -r requirements-dev.txt
+ruff check . && ruff format --check .   # lint
+pytest                                  # unit tests
+cd ..
+bash scripts/smoke-test.sh              # against a running deployment (PowerShell: .\scripts\smoke-test.ps1)
+```
+
+---
+
 ## Documentation
 
 ---
@@ -395,5 +431,6 @@ assumption. See `documentation.md` for exactly how.
 - **Guessable short codes** — sequential by design; fine for this scope, not for access control.
 - **In-memory metrics** — reset on restart, per replica (Part 3 → Metrics).
 - **Redis has no auth** — fine for local-only scope, not for a shared environment.
-- **No CI/CD** — out of scope for the stated deliverables; a build+test GitHub Actions workflow
-  would be the next step.
+- **CI only, no CD** — every push is checked (see [CI](#ci)), but nothing deploys automatically;
+  there's no shared cluster to deploy to. Next steps would be publishing versioned images to a
+  registry (e.g. GHCR) and a GitOps controller (ArgoCD/Flux) deploying from git.
