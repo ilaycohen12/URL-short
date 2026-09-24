@@ -15,6 +15,12 @@ IMAGE_TAG=$(awk '/^api:/{f=1} f && /^  image:/{g=1} g && /tag:/{print $2; exit}'
 
 echo "==> Using image tag: $IMAGE_TAG (from helm/url-short/values.yaml)"
 
+# Fail fast with a readable message instead of kind's raw `docker info` dump.
+for tool in docker kind kubectl helm; do
+  command -v "$tool" >/dev/null || { echo "ERROR: '$tool' not found on PATH." >&2; exit 1; }
+done
+docker info >/dev/null 2>&1 || { echo "ERROR: Docker daemon not reachable - start Docker Desktop and rerun." >&2; exit 1; }
+
 echo "==> Creating kind cluster (skipping if it already exists)..."
 if kind get clusters 2>/dev/null | grep -qx "$CLUSTER_NAME"; then
   echo "    Cluster '$CLUSTER_NAME' already exists, skipping."

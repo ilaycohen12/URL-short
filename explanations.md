@@ -382,3 +382,21 @@ removed. A **named volume** in Docker Compose is storage that lives outside the 
 lifecycle, so Postgres's data directory survives a container restart/recreation. The Kubernetes
 equivalent is a **PersistentVolumeClaim** (PVC) — a request for durable storage that a pod mounts,
 independent of the pod's own lifecycle.
+
+## `/docs` — FastAPI's auto-generated interactive API page
+
+FastAPI builds an **OpenAPI spec** (a standard JSON description of the API, served at
+`/openapi.json`) straight from the code: the route decorators (`@app.post("/shorten")`) give the
+endpoints, and the Pydantic models in `schemas.py` give the request/response shapes and validation
+rules (`url: HttpUrl`). `/docs` is **Swagger UI** rendering that spec as a clickable page; `/redoc`
+is a read-only view of the same spec. No doc files exist in the repo — it's generated at runtime,
+so it can't drift from the code the way hand-written API docs do.
+
+Usage: expand an endpoint → "Try it out" → edit the body → Execute. Shows the equivalent `curl`
+command, status code and response body. Sending an invalid URL shows the real `422` + Pydantic's
+error message (and bumps `validation_errors` in `/health`).
+
+Gotchas: testing `GET /{short_code}` there usually fails with "Failed to fetch" — the page's
+JavaScript follows the 302 to an external site and the browser blocks it (CORS). The app is fine;
+test redirects by pasting the short URL into the address bar. In production `/docs` is often
+disabled or protected, since it maps out the whole API for anyone who finds it.
