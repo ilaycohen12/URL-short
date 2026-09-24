@@ -423,3 +423,42 @@ the node container itself:
 Same idea as Docker Compose: `docker compose down` removes containers but keeps named volumes,
 `down -v` removes the volumes too. In a real cluster, PVCs are backed by network storage (e.g. an
 AWS EBS volume) that lives outside any node, which is why deleting nodes there doesn't lose data.
+
+## Rolling back through git, and detecting drift
+
+**Drift** = the cluster no longer matches what git says should be deployed. Imperative commands
+cause it: `helm rollback` / `helm upgrade --set` change the Helm release without touching
+`values.yaml`; `kubectl set image` / `edit` / `rollout undo` change live objects without even
+touching Helm's record. The danger: the next deploy from git silently re-applies whatever the file
+says — e.g. the broken version you had just rolled back from.
+
+**Rollback through git**: change the file first, then deploy it. `git revert <commit>` creates a
+*new* commit that undoes an old one (history keeps both — what happened and why), then
+`setup-k8s` runs `helm upgrade --install` from the file. This is the manual version of GitOps;
+tools like ArgoCD/Flux automate it by watching the repo and continuously applying it, reverting
+manual changes ("self-heal").
+
+**Detecting drift** — two different comparisons, because there are two places state lives:
+- `helm get manifest <release>` = the YAML Helm *last applied* (stored in the release record).
+  `helm template <release> <chart>` = the YAML the *current files* would produce. Different →
+  someone deployed something other than git (helm rollback / --set).
+- `kubectl diff -f <yaml>` = asks the API server "what would change if I applied this?" against
+  the *live* objects. Catches kubectl edits Helm never saw. Exit code 0 = same, 1 = different.
+
+## Helm 4 and server-side apply: field ownership and `--force-conflicts`
+
+Helm 4 applies manifests with Kubernetes **server-side apply** (SSA). The API server records a
+**field manager** (owner) for each field it sets. If another tool later changes a field — e.g.
+`kubectl set image` becomes the owner of `.image` (manager `kubectl-set`) — the next
+`helm upgrade` fails with `conflict ... conflict with "kubectl-set"` instead of silently
+overwriting someone's change. `--force-conflicts` tells Helm to take the field back. Our setup
+script passes it because git is the source of truth. (Helm 3 used a client-side three-way merge
+and would have overwritten it without asking.)
+
+## `kubectl rollout status` vs `kubectl wait --for=condition=Ready`
+
+`kubectl wait pod -l app=api --for=condition=Ready` waits for *pods matching a label* — during a
+rolling update that includes the OLD pod, which is still Ready, so the wait can return before the
+new version even starts. `kubectl rollout status deployment/api` tracks the *rollout*: it waits
+until the new pods are ready and the old ones have been removed. Use it after anything that may
+change a Deployment.

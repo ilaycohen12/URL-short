@@ -47,20 +47,28 @@ echo "==> Loading image into the cluster..."
 kind load docker-image "url-short-api:$IMAGE_TAG" --name "$CLUSTER_NAME"
 
 echo "==> Installing/upgrading the Helm release..."
-helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT"
+# --force-conflicts: Helm 4 uses server-side apply, where each field has an owner. A manual
+# `kubectl set image`/`edit` takes ownership of that field, and a plain upgrade then fails with
+# a "conflict". Git is the source of truth, so git's values win (scripts/check-drift.sh shows
+# what would be overwritten beforehand).
+helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT" --force-conflicts
 
-echo "==> Waiting for all pods to become ready..."
-kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=postgres --timeout=120s
-kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=redis --timeout=60s
-kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l app=api --timeout=120s
+# Wait for each rollout, not for "pods with this label are Ready": during a rolling
+# update the OLD pod is still Ready, so a label-based wait returns before the new
+# version is even up. `rollout status` waits until new pods are ready AND old ones are gone.
+echo "==> Waiting for the rollout to finish..."
+for deploy in postgres redis api; do
+  kubectl --context "$CONTEXT" rollout status "deployment/$deploy" --timeout=180s
+done
 
 # After a restart, pods can briefly still show their pre-stop Ready status,
-# so confirm through the real endpoint rather than trusting `kubectl wait` alone.
+# so confirm through the real endpoint rather than trusting kubectl alone.
 echo "==> Checking /health..."
+HEALTH=""
 for _ in $(seq 1 30); do
-  curl -sf http://localhost:8000/health >/dev/null && break
+  HEALTH=$(curl -sf http://localhost:8000/health) && break
   sleep 2
 done
+[ -n "$HEALTH" ] || { echo "ERROR: /health did not respond with 200 within 60s." >&2; exit 1; }
 echo "==> Done. API available at http://localhost:8000"
-curl -s http://localhost:8000/health
-echo
+echo "$HEALTH"

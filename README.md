@@ -5,8 +5,7 @@ PostgreSQL (source of truth) and Redis (cache). The same app is deployed two ind
 ways — Docker Compose (Part 1) and Kubernetes via Helm (Part 2) — with operational
 visibility and a runbook on top (Part 3).
 
-**Status:** Parts 1–3 complete and verified live. One open item: rollback drift
-(see Part 2 → Known gap).
+**Status:** Parts 1–3 complete and verified live.
 
 | Path | What's there |
 |---|---|
@@ -14,7 +13,7 @@ visibility and a runbook on top (Part 3).
 | `docker-compose.yml`, `.env.example` | Part 1 |
 | `helm/url-short/` | Part 2 Helm chart — `values.yaml` is the single source of truth |
 | `k8s/kind-cluster.yaml` | Local kind cluster config (maps the API to `localhost:8000`) |
-| `scripts/` | One-command Kubernetes setup / stop / teardown (`.sh` + PowerShell `.ps1`) |
+| `scripts/` | One-command Kubernetes setup / stop / teardown / drift check (`.sh` + PowerShell `.ps1`) |
 | `documentation.md` | Decision log — why each choice was made, every bug found |
 | `explanations.md` | Concept write-ups (cache-aside, base62, Helm, probes, …) |
 
@@ -43,6 +42,7 @@ URL-short/
 ├── scripts/
 │   ├── setup-k8s.sh / .ps1       # create (or restart) the cluster + deploy
 │   ├── stop-k8s.sh / .ps1        # stop the cluster, keep data
+│   ├── check-drift.sh / .ps1     # does the cluster still match git?
 │   └── teardown-k8s.sh / .ps1    # delete the cluster and all data
 ├── docker-compose.yml
 ├── .env.example
@@ -221,17 +221,34 @@ kubectl get pods -l app=postgres -w   # the Deployment recreates it automaticall
 curl -L http://localhost:8000/<code>  # still resolves — the data survived on the PVC
 ```
 
-**Rollout and rollback:**
+**Rollout and rollback — through git:** `helm/url-short/values.yaml` in git is the source of
+truth. Every change, including a rollback, is made in the file first; the cluster follows it.
 ```bash
-helm upgrade url-short ./helm/url-short --set api.image.tag=v2
-kubectl rollout status deployment/api
+# Roll out a new version:
+#   edit helm/url-short/values.yaml (api.image.tag: v3), commit, then:
+bash scripts/setup-k8s.sh                 # PowerShell: .\scripts\setup-k8s.ps1
 
-helm rollback url-short
-kubectl rollout status deployment/api
+# Roll back = undo the commit, then deploy again:
+git revert <commit-that-bumped-the-tag>   # values.yaml goes back, as a new commit with a reason
+bash scripts/setup-k8s.sh
 
-helm history url-short        # revision history
-helm get values url-short     # what's actually deployed right now
+# Check the cluster still matches git:
+bash scripts/check-drift.sh               # PowerShell: .\scripts\check-drift.ps1
 ```
+**Don't use `helm rollback` or `helm upgrade --set`** — they change the cluster without changing
+the file, so git and the cluster silently disagree ("drift"), and the next deploy from git
+re-releases the version you rolled back from.
+
+**`check-drift`** catches it when something went around git anyway. Exit `0` = no drift,
+`1` = drift (with the exact difference shown), `2` = couldn't check. Two checks:
+1. **Helm's last deploy vs git** (`helm get manifest` vs `helm template`) — catches
+   `helm rollback` and `helm upgrade --set`.
+2. **Live cluster vs git** (`kubectl diff`) — catches changes that bypass Helm completely
+   (`kubectl set image` / `edit` / `scale` / `rollout undo`), which check 1 can't see.
+
+To fix drift, make git say what you want and run `setup-k8s` — it overwrites manual changes
+(`--force-conflicts`, needed because Helm 4's server-side apply otherwise refuses to overwrite a
+field someone changed with `kubectl`).
 
 **Design notes:**
 - **Helm**, not plain manifests/Kustomize (all three allowed). Built and fully tested as plain
@@ -250,10 +267,13 @@ helm get values url-short     # what's actually deployed right now
 - **Host access**: `NodePort`, not `port-forward` — keeps working without an open terminal.
 - **Resources**: API/Postgres `100m–500m` CPU, `128–256Mi` memory; Redis lighter (`50m–200m`,
   `64–128Mi`) since it does less work per request. Local-demo starting points, not load-tested.
-- **Known gap — rollback drift**: `helm upgrade --set` / `helm rollback` change the live release
-  without touching `values.yaml` — same drift risk `kubectl rollout undo` had on plain manifests
-  (recurred here too during testing). `helm get values` makes it detectable, doesn't prevent it.
-  Not yet fixed.
+- **Rollback drift — handled by process + detection, not enforcement**: rolling back through git
+  (above) keeps the file and cluster in sync, and `check-drift` detects anything that went around
+  it. Nothing *prevents* someone from running `helm rollback` by hand — enforcing that is what a
+  GitOps controller (ArgoCD/Flux) adds: it watches the repo and reverts manual changes
+  automatically. Out of scope for a local assignment. (Why not a script that rolls back and then
+  copies the cluster's values into `values.yaml`? That makes the cluster the source of truth —
+  backwards — and `helm get values` only returns overrides, not the full config.)
 
 ---
 
@@ -353,10 +373,23 @@ assumption. See `documentation.md` for exactly how.
 
 ---
 
+## Documentation
+
+---
+
+## Tools used
+
+---
+
+## Decisions
+
+---
+
 ## Known limitations
 
-- **Rollback drift** — `helm rollback` / `helm upgrade --set` can desync `values.yaml` from the
-  live cluster (Part 2 → Known gap). Open item.
+- **Rollback drift is detected, not prevented** — rollbacks go through git and `check-drift`
+  catches manual changes, but nothing blocks a manual `helm rollback`; that needs GitOps
+  (ArgoCD/Flux). See Part 2's Design notes.
 - **No deduplication** — the same URL shortened twice gets two codes; deliberate, see Part 1's
   Design notes.
 - **Guessable short codes** — sequential by design; fine for this scope, not for access control.
