@@ -441,24 +441,23 @@ bash scripts/smoke-test.sh              # against a running deployment (PowerShe
 
 ---
 
-## Workflow
+## Documentation
 
 What I did, in order.
 
 **Day 1: build it**
-1. Read the brief, sent Shani a time estimate (about 13 hours) and created the GitHub repo.
-2. Chose the stack (Python + FastAPI, Postgres, Redis) and designed the endpoints.
-3. Wrote the API: settings, database, cache, base62 short codes, input validation and `/health`.
-4. Ran it locally against throwaway Postgres and Redis containers and fixed the first bugs.
-5. Part 1: wrote the Dockerfile and `docker-compose.yml` with healthchecks, a data volume and
+1. Chose the stack (Python + FastAPI, Postgres, Redis) and designed the endpoints.
+2. Wrote the API: settings, database, cache, base62 short codes, input validation and `/health`.
+3. Ran it locally against throwaway Postgres and Redis containers and fixed the first bugs.
+4. Part 1: wrote the Dockerfile and `docker-compose.yml` with healthchecks, a data volume and
    `.env.example`, then tested a clean start and a restart.
-6. Part 2: created a kind cluster and deployed step by step: config and secret, Postgres with
+5. Part 2: created a kind cluster and deployed step by step: config and secret, Postgres with
    storage, Redis, then the API with probes, resources and host access.
-7. Rolled out a new version and rolled it back, and noticed the rollback left the files out of
+6. Rolled out a new version and rolled it back, and noticed the rollback left the files out of
    sync with the cluster.
-8. Part 3: added version, uptime and traffic counters to `/health`, and wrote the runbook by
+7. Part 3: added version, uptime and traffic counters to `/health`, and wrote the runbook by
    causing each failure for real.
-9. Converted the Kubernetes files to a Helm chart, added setup and teardown scripts and the
+8. Converted the Kubernetes files to a Helm chart, added setup and teardown scripts and the
    `/dashboard` page, and rewrote the README.
 
 **Day 2: make it solid**
@@ -468,9 +467,7 @@ What I did, in order.
    that went around it.
 4. Added CI with GitHub Actions: lint, unit tests, and full Compose and Kubernetes tests on
    every push.
-5. Checked every requirement of the brief by running it, and fixed what failed: Compose without
-   a `.env`, a Redis outage taking the whole service down, a slow `/health` while Postgres was
-   down, and Kubernetes killing the API while it started after a restart.
+5. Tested it all as a single product.
 
 ---
 
