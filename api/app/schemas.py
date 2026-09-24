@@ -33,6 +33,7 @@ class Metrics(BaseModel):
     not_found: int
     validation_errors: int
     errors: int
+    db_unavailable: int
 
 
 class HealthResponse(BaseModel):

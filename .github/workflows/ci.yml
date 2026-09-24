@@ -130,6 +130,24 @@ jobs:
           kubectl scale deploy/redis --replicas=1
           kubectl rollout status deploy/redis --timeout=90s
 
+      # Postgres down: the API can't work, so it must say so fast and clearly - 503 (not a 500
+      # "bug"), /health answering in seconds (before the fix it could hang for up to 60s).
+      - name: Postgres outage - fast 503s, recovers afterwards
+        run: |
+          kubectl scale deploy/postgres --replicas=0
+          kubectl wait --for=delete pod -l app=postgres --timeout=60s
+          HEALTH=$(curl -s -m 10 -o /dev/null -w '%{http_code} %{time_total}' http://localhost:8000/health)
+          SHORTEN=$(curl -s -m 10 -o /dev/null -w '%{http_code}' http://localhost:8000/shorten \
+                      -H "Content-Type: application/json" -d '{"url":"https://example.com/pg-down"}')
+          echo "/health: $HEALTH   shorten: $SHORTEN"
+          test "${HEALTH%% *}" = "503"
+          awk -v t="${HEALTH##* }" 'BEGIN { exit !(t < 5) }'   # answered in under 5s
+          test "$SHORTEN" = "503"
+          kubectl scale deploy/postgres --replicas=1
+          kubectl rollout status deploy/postgres --timeout=120s
+          for i in $(seq 1 40); do curl -sf -o /dev/null http://localhost:8000/health && break; sleep 2; done
+          curl -sf http://localhost:8000/health
+
       - name: Data survives stop-k8s + setup-k8s
         run: |
           CODE=$(curl -s http://localhost:8000/shorten -H "Content-Type: application/json" \

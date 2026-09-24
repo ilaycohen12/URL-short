@@ -42,6 +42,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="row"><span>Not found</span><span id="m_nf">-</span></div>
     <div class="row"><span>Validation errors</span><span id="m_valerr">-</span></div>
     <div class="row"><span>Errors</span><span id="m_err">-</span></div>
+    <div class="row"><span>Postgres unavailable (503)</span><span id="m_dbdown">-</span></div>
   </div>
   <div class="updated" id="updated">-</div>
 </div>
@@ -73,6 +74,7 @@ async function refresh() {
     errEl.textContent = d.metrics.errors;
     errEl.style.color = d.metrics.errors > 0 ? '#f87171' : '';
     errEl.style.fontWeight = d.metrics.errors > 0 ? '700' : '';
+    document.getElementById('m_dbdown').textContent = d.metrics.db_unavailable;
     document.getElementById('updated').textContent = 'updated ' + new Date().toLocaleTimeString();
   } catch (e) {
     document.getElementById('badge').textContent = 'UNREACHABLE';

@@ -507,3 +507,16 @@ unset it becomes an empty string (with a warning). `${VAR:-default}` uses `defau
 is unset or empty, so the file works on a clean clone with no `.env`, while a `.env` still
 overrides it. (`${VAR:?message}` is the opposite: fail loudly if it's missing — the right choice
 for values that must never fall back, like real production secrets.)
+
+## Timeouts, and 500 vs 503
+
+**Every network call needs a timeout.** A dependency that's *down* usually fails instantly
+(connection refused); one that's *unreachable* (packets silently dropped) makes the caller wait
+for the library's default — 60s for asyncpg — and requests pile up. Health checks especially must
+answer faster than the probe that calls them, or the probe times out instead of getting a clear
+answer.
+
+**500 vs 503:** `500 Internal Server Error` = something unexpected broke in *our* code — a bug,
+someone should investigate the traceback. `503 Service Unavailable` = a temporary condition
+(here: the database can't be reached); the client can retry later. Keeping them separate keeps
+the `errors` counter meaningful: it only moves for real bugs.

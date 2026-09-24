@@ -140,7 +140,8 @@ GET /Z
 ```
 Postgres is the source of truth; Redis only holds copies (cache-aside). If Redis is down,
 requests still work from Postgres, just slower. If Postgres is down, creating links and
-uncached lookups fail, and `/health` returns `503` so Kubernetes stops routing to the pod.
+uncached lookups fail fast (within 3s) with `503 Database temporarily unavailable`, and
+`/health` returns `503` so Kubernetes stops routing to the pod.
 
 **Command-line examples** (same for Compose and Kubernetes; shortening is in the
 [Quick start](#quick-start)):
@@ -323,13 +324,16 @@ field someone changed with `kubectl`).
   "uptime_seconds": 12.0,
   "metrics": {
     "shorten_requests": 6, "redirects": 6, "cache_hits": 2, "cache_misses": 4, "not_found": 1,
-    "validation_errors": 0, "errors": 0
+    "validation_errors": 0, "errors": 0, "db_unavailable": 0
   }
 }
 ```
 - **Postgres unreachable** → HTTP **`503`**, `"status": "degraded"`. The API can't work without
   it; probes and monitoring tools look at status codes, not JSON bodies, so this is what makes
   Kubernetes stop routing traffic to the pod.
+- **Always answers fast** — each dependency check has a 2s limit (below the readiness probe's
+  3s timeout) and Postgres connections give up after 3s, so `/health` never hangs during an
+  outage (before this, an unreachable Postgres on Kubernetes could make it take up to 60s).
 - **Only Redis unreachable** → HTTP **`200`**, `"status": "degraded"`, `"redis": false`. Requests
   are still served from Postgres (just without the cache), so the pod stays in service — on-call
   still sees the problem in the body and in the logs (`Redis unavailable, reading from Postgres`).
@@ -350,13 +354,14 @@ styled and auto-refreshing every 3 seconds. Easier to glance at during an incide
 | `not_found` | Not found | Requests for a short code that doesn't exist (404) |
 | `validation_errors` | Validation errors | Bad input rejected with `422` — the *client* sent something wrong |
 | `errors` | Errors | Unhandled `500`s — a bug on *our* side; should always be 0 |
+| `db_unavailable` | Postgres unavailable (503) | Requests answered `503` because Postgres couldn't be reached — an outage, not a bug |
 
 How to read them:
 - **`redirects` = `cache_hits` + `cache_misses`**, always — every successful redirect is exactly
   one of the two. The first open of a link is a miss (Postgres, then cached); repeats are hits.
 - A lookup that isn't in Postgres either counts as `not_found`, not as a miss.
-- **`validation_errors` vs `errors`** tells you whose problem a spike is: clients sending bad
-  data, or our code failing and needing someone on call.
+- **`validation_errors` vs `errors` vs `db_unavailable`** tells you whose problem a spike is:
+  clients sending bad data, our code failing, or the database being unreachable.
 - `not_found` often ticks up by itself from browsers requesting `/favicon.ico`.
 - **Limits:** counters live in the API process's memory — they reset to 0 when the pod restarts
   (including after a rollout/rollback), and each replica counts separately (we run 1).
@@ -382,7 +387,9 @@ assumption. See `documentation.md` for exactly how.
 - *Verify recovery:* retry the request, confirm success; confirm `/health` stayed `ok` throughout.
 
 **2. The API cannot connect to PostgreSQL**
-- `/health` → `"postgres": false` isolates it from Redis/app bugs.
+- `/health` → `"postgres": false` (HTTP 503) isolates it from Redis/app bugs. Requests fail
+  fast with `503 Database temporarily unavailable`, and `db_unavailable` in the metrics counts
+  them; the API log shows `Postgres unavailable on POST /shorten: ConnectionRefusedError(...)`.
 - `kubectl get pods -l app=postgres` / `docker compose ps postgres` — is it actually up?
 - `kubectl logs -l app=postgres` / `docker compose logs postgres` — what does it say?
 - `kubectl get endpoints postgres` — does the Service have a live target?
@@ -418,9 +425,9 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `master` and e
 
 | Job | What it does | Time |
 |---|---|---|
-| **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression, Redis-failure fallback) · `helm lint` + `helm template` · `docker build` | ~40s |
+| **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression, Redis-failure fallback, 503 on Postgres outage, fast `/health`) · `helm lint` + `helm template` · `docker build` | ~40s |
 | **Docker Compose on a clean checkout** | The brief's exact `docker compose up --build` with **no `.env`** → `smoke-test.sh` → Redis outage (links still redirect) | ~1 min |
-| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → Redis outage (API must stay ready, links still redirect) → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
+| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → Redis outage (API must stay ready, links still redirect) → Postgres outage (fast `503`s, recovers) → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
 
 The Compose and Kubernetes jobs only start if the first one passes, and they use the **same scripts a tester
 runs** — so CI also proves the README's instructions work. On failure it prints pod status and
@@ -532,11 +539,7 @@ checked live, and several were wrong or incomplete:
 - **Guessable short codes** — sequential by design; fine for this scope, not for access control.
 - **In-memory metrics** — reset on restart, per replica (Part 3 → Metrics).
 - **Redis has no auth** — fine for local-only scope, not for a shared environment.
-- **Slow `/health` during a Postgres outage on Kubernetes** — it can take up to 60s to answer
-  (the database driver's default connection timeout). Readiness still works (the probe gives up
-  after 3s), but a person running `curl /health` waits. Fix: a short Postgres connect timeout.
-- **Smaller known gaps** — a Postgres outage returns `500` where `503` would be more accurate;
-  cached entries never expire (Redis grows without limit — fix: a TTL); leading zeros create
+- **Smaller known gaps** — cached entries never expire (Redis grows without limit — fix: a TTL); leading zeros create
   alias codes (`/1` = `/01`); the runbook's `kubectl get endpoints` is deprecated in favour of
   `kubectl get endpointslices`.
 - **CI only, no CD** — every push is checked (see [CI](#ci)), but nothing deploys automatically;

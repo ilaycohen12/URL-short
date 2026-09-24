@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import cache_get, cache_set, check_redis, get_redis
 from app.dashboard import DASHBOARD_HTML
-from app.db import check_db, get_db, init_models
+from app.db import DB_UNAVAILABLE_ERRORS, check_db, get_db, init_models
 from app.models import URLMapping
 from app.schemas import HealthResponse, Metrics, ShortenRequest, ShortenResponse
 from app.shortcode import decode, encode
@@ -23,6 +23,9 @@ logger = logging.getLogger("url_shortener")
 STARTUP_RETRY_ATTEMPTS = 30
 STARTUP_RETRY_DELAY_SECONDS = 2
 POSTGRES_INT_MAX = 2_147_483_647
+# Each /health dependency check must answer within this, below the readiness probe's 3s
+# timeoutSeconds - so the probe always gets a real 503 instead of timing out itself.
+HEALTH_CHECK_TIMEOUT_SECONDS = 2
 APP_VERSION = "v2"
 
 START_TIME = time.monotonic()
@@ -34,6 +37,7 @@ _metrics = {
     "not_found": 0,
     "validation_errors": 0,
     "errors": 0,
+    "db_unavailable": 0,
 }
 
 
@@ -97,6 +101,13 @@ app = FastAPI(
     swagger_ui_parameters={"defaultModelsExpandDepth": -1},
 )
 
+DB_UNAVAILABLE_RESPONSE = {
+    503: {
+        "description": "Postgres is temporarily unreachable - retry later.",
+        "content": {"application/json": {"example": {"detail": "Database temporarily unavailable"}}},
+    }
+}
+
 NOT_FOUND_RESPONSE = {
     404: {
         "description": "No short link with this code exists.",
@@ -109,6 +120,18 @@ NOT_FOUND_RESPONSE = {
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     _metrics["validation_errors"] += 1
     return await request_validation_exception_handler(request, exc)
+
+
+async def db_unavailable_handler(request: Request, exc: Exception):
+    # Postgres unreachable: a temporary outage, not a bug in our code - 503 tells clients to retry
+    # later and keeps these out of the `errors` counter (which should mean "our bug").
+    _metrics["db_unavailable"] += 1
+    logger.warning("Postgres unavailable on %s %s: %r", request.method, request.url.path, exc)
+    return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable"})
+
+
+for _exc_type in DB_UNAVAILABLE_ERRORS:
+    app.add_exception_handler(_exc_type, db_unavailable_handler)
 
 
 @app.exception_handler(Exception)
@@ -125,7 +148,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     summary="Create a short link",
     description="Stores the URL and returns its short code. Shortening the same URL twice "
     "returns two different codes (no deduplication, by design).",
-    responses={422: {"description": "Invalid input — not a valid http(s) URL, or longer than 2048 characters."}},
+    responses={
+        422: {"description": "Invalid input — not a valid http(s) URL, or longer than 2048 characters."},
+        **DB_UNAVAILABLE_RESPONSE,
+    },
 )
 async def shorten_url(
     payload: ShortenRequest,
@@ -144,6 +170,14 @@ async def shorten_url(
     return ShortenResponse(short_code=short_code, short_url=short_url)
 
 
+async def _check_within_timeout(check) -> bool:
+    """A dependency check that takes too long counts as 'down' - /health must always answer fast."""
+    try:
+        return await asyncio.wait_for(check(), timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+    except TimeoutError:
+        return False
+
+
 @app.get(
     "/health",
     response_model=HealthResponse,
@@ -155,8 +189,7 @@ async def shorten_url(
     responses={503: {"description": "Postgres is unreachable — the API can't serve requests (`status: degraded`)."}},
 )
 async def health(response: Response) -> HealthResponse:
-    postgres_ok = await check_db()
-    redis_ok = await check_redis()
+    postgres_ok, redis_ok = await asyncio.gather(_check_within_timeout(check_db), _check_within_timeout(check_redis))
     overall = "ok" if postgres_ok and redis_ok else "degraded"
     # 503 only when the API really can't work. Redis is just a cache: without it requests are
     # served from Postgres, so the pod must stay in the readiness pool (a cache outage must not
@@ -197,7 +230,11 @@ async def dashboard() -> str:
     tags=["Short links"],
     summary="Redirect to the original URL",
     description="Looks the code up (Redis first, then Postgres) and redirects to the original URL.",
-    responses={302: {"description": "Redirect to the original URL (see the `Location` header)."}, **NOT_FOUND_RESPONSE},
+    responses={
+        302: {"description": "Redirect to the original URL (see the `Location` header)."},
+        **NOT_FOUND_RESPONSE,
+        **DB_UNAVAILABLE_RESPONSE,
+    },
 )
 async def resolve_short_code(
     short_code: str,
