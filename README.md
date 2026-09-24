@@ -380,19 +380,32 @@ Each entry below was tested by causing the failure for real, not written from as
 - *Verify recovery:* retry the request, confirm success; confirm `/health` stayed `ok` throughout.
 
 **2. The API cannot connect to PostgreSQL**
-- `/health` → `"postgres": false` (HTTP 503) isolates it from Redis/app bugs. Requests fail
-  fast with `503 Database temporarily unavailable`, and `db_unavailable` in the metrics counts
-  them; the API log shows `Postgres unavailable on POST /shorten: ConnectionRefusedError(...)`.
-- `kubectl get pods -l app=postgres` / `docker compose ps postgres` - is it actually up?
-- `kubectl logs -l app=postgres` / `docker compose logs postgres` - what does it say?
-- `kubectl get endpoints postgres` - does the Service have a live target?
-- **Known gotcha:** Postgres only applies `POSTGRES_USER`/`PASSWORD` on the *first* init of an
-  empty data dir - changing the Secret later without wiping the PVC leaves old credentials in
-  place, and the API fails to authenticate even though the Secret "looks right."
-- *Live-tested:* scaling Postgres to 0 reproduced this exactly - `/health` flipped to `degraded`
-  within one check interval.
-- *Verify recovery:* `/health` → `postgres: true`, then a real create→resolve cycle, not just the
-  flag.
+- **Confirm it's Postgres:** `/health` shows `"postgres": false` (HTTP 503). Requests fail fast
+  with `503 Database temporarily unavailable`, counted in `db_unavailable`.
+  - **On Kubernetes, after ~15s `localhost:8000` stops answering at all**: the readiness probe
+    has taken the API pod out of the Service, so the NodePort has nowhere to send you. Reach the
+    pod directly instead (skips the Service, works even when the pod isn't ready):
+    `kubectl port-forward deploy/api 18000:8000`, then `curl localhost:18000/health`.
+- **Is Postgres running?** `kubectl get deploy postgres` + `kubectl get pods -l app=postgres` /
+  `docker compose ps postgres`.
+  - Deployment shows `0/0` → it was scaled to zero. Fix: `kubectl scale deploy/postgres --replicas=1`
+    (Compose: `docker compose start postgres`).
+  - Pod crashing or restarting → next step.
+- **Why is it failing?** `kubectl logs -l app=postgres` (add `--previous` after a crash) /
+  `docker compose logs postgres`. A pod stuck in `Pending` usually means storage:
+  `kubectl get pvc postgres-pvc` should say `Bound`.
+- **Can the API find it?** `kubectl get endpointslices -l kubernetes.io/service-name=postgres` -
+  no address under ENDPOINTS means the Service has no ready Postgres pod behind it.
+- **Postgres is up but the API still can't log in?** Postgres applies `POSTGRES_USER`/`PASSWORD`
+  only when it first creates its data, so a password changed later in the Secret is ignored.
+  Fix: set the same password inside Postgres -
+  `kubectl exec deploy/postgres -- psql -U urlshortener -c "ALTER USER urlshortener PASSWORD '<new>'"`
+  (Compose: `docker compose exec postgres psql ...`) - or wipe the data (`teardown-k8s`) if it's
+  disposable.
+- *Live-tested:* scaled Postgres to 0 - `/health` answered 503 immediately, after ~15s the API pod
+  was `0/1` and `localhost:8000` unreachable, while `port-forward` still showed `"postgres": false`.
+- *Verify recovery:* `/health` → `"postgres": true` and the API pod back to `1/1`, then create a
+  link and open it - a real request, not just the flag.
 
 **3. A Kubernetes pod is running but receives no traffic**
 - `kubectl get pods` - `READY: 0/1` (container running, probe failing) is the signature.
