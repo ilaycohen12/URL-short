@@ -18,20 +18,53 @@ visibility and a runbook on top (Part 3).
 | `documentation.md` | Decision log — why each choice was made, every bug found |
 | `explanations.md` | Concept write-ups (cache-aside, base62, Helm, probes, …) |
 
+```text
+URL-short/
+├── api/
+│   ├── app/
+│   │   ├── main.py            # FastAPI app: routes, metrics, exception handlers
+│   │   ├── schemas.py         # request/response models + URL validation
+│   │   ├── models.py          # SQLAlchemy table (url_mappings)
+│   │   ├── db.py              # Postgres connection/session
+│   │   ├── cache.py           # Redis client
+│   │   ├── config.py          # settings from environment variables
+│   │   ├── shortcode.py       # base62 encode/decode
+│   │   └── dashboard.py       # /dashboard HTML page
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── .dockerignore
+├── helm/url-short/
+│   ├── Chart.yaml
+│   ├── values.yaml            # single source of truth for the Kubernetes deployment
+│   └── templates/             # api / postgres / redis Deployments + Services,
+│                              # postgres PVC, ConfigMap, Secret
+├── k8s/
+│   └── kind-cluster.yaml
+├── scripts/
+│   ├── setup-k8s.sh / .ps1
+│   └── teardown-k8s.sh / .ps1
+├── docker-compose.yml
+├── .env.example
+├── README.md
+├── documentation.md
+└── explanations.md
+```
+
 ---
 
 ## Quick start
 
-Compose and Kubernetes are **two independent ways to run the same app** — not one layered on
-the other. Both serve the API on `localhost:8000`, so **run only one at a time**.
+Compose and Kubernetes are **two independent ways to run the same app**. Both serve the API on `localhost:8000`, so **run only one at a time**.
 
 **1. Start it** (pick one):
 
 | | Docker Compose (Part 1) | Kubernetes (Part 2) |
 |---|---|---|
 | Needs | Docker with Compose | Docker, `kind`, `kubectl`, `helm` |
-| Start | `cp .env.example .env` then `docker compose up --build` | `bash scripts/setup-k8s.sh` — PowerShell: `.\scripts\setup-k8s.ps1` |
-| Stop | `docker compose down` | `bash scripts/teardown-k8s.sh` — PowerShell: `.\scripts\teardown-k8s.ps1` |
+| Start — Linux / macOS / Git Bash | `cp .env.example .env` then `docker compose up --build` | `bash scripts/setup-k8s.sh` |
+| Start — Windows PowerShell | `cp .env.example .env` then `docker compose up --build` | `.\scripts\setup-k8s.ps1` |
+| Stop — Linux / macOS / Git Bash | `docker compose down` | `bash scripts/teardown-k8s.sh` |
+| Stop — Windows PowerShell | `docker compose down` | `.\scripts\teardown-k8s.ps1` |
 
 **2. Shorten a URL** → you get back a `short_url` (e.g. `http://localhost:8000/1`).
 Commands in [Using the API](#using-the-api), or click-to-try at http://localhost:8000/docs.
@@ -62,12 +95,6 @@ http://localhost:8000/dashboard (same data, auto-refreshing). Explained in
 | Shorten | `curl http://localhost:8000/shorten --json '{"url":"https://example.com/x"}'` | `Invoke-RestMethod -Uri "http://localhost:8000/shorten" -Method Post -ContentType "application/json" -Body '{"url":"https://example.com/x"}'` |
 | Open link | `curl -L http://localhost:8000/1` | `Invoke-WebRequest -Uri "http://localhost:8000/1"` |
 | Health | `curl http://localhost:8000/health` | `Invoke-RestMethod -Uri "http://localhost:8000/health"` |
-
-> **Why not `curl` in PowerShell?** In Windows PowerShell 5.1, `curl` is an alias for
-> `Invoke-WebRequest` and doesn't understand curl's flags. `curl.exe` (the real curl) works for
-> plain GETs, but PowerShell 5.1 strips the inner double quotes when passing arguments to external
-> programs — a JSON body arrives as `{url:...}` and the API rejects it with `422`.
-> `Invoke-RestMethod` avoids this because the body never leaves PowerShell.
 
 **`/docs`** — easiest way to try the API with no shell quoting at all: open
 http://localhost:8000/docs → `POST /shorten` → "Try it out" → edit the body → Execute. It shows
@@ -191,9 +218,6 @@ helm get values url-short     # what's actually deployed right now
 ---
 
 ## Part 3 — Operate and troubleshoot
-
-The assignment asks for enough visibility for an on-call engineer, plus a runbook for three
-specific situations.
 
 ### Visibility
 
