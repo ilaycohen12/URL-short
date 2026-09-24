@@ -1,10 +1,13 @@
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 MAX_URL_LENGTH = 2048
 
 
 class ShortenRequest(BaseModel):
-    url: HttpUrl
+    url: HttpUrl = Field(
+        description=f"The full URL to shorten, including http:// or https:// (max {MAX_URL_LENGTH} chars).",
+        examples=["https://docs.google.com/spreadsheets/u/0/"],
+    )
 
     @field_validator("url")
     @classmethod
@@ -15,8 +18,11 @@ class ShortenRequest(BaseModel):
 
 
 class ShortenResponse(BaseModel):
-    short_code: str
-    short_url: str
+    short_code: str = Field(description="The generated code.", examples=["5"])
+    short_url: str = Field(
+        description="Open this to be redirected to the original URL.",
+        examples=["http://localhost:8000/5"],
+    )
 
 
 class Metrics(BaseModel):

@@ -62,7 +62,45 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="URL Shortener", lifespan=lifespan)
+# Everything below up to the routes is documentation metadata for /docs
+# (it ends up in /openapi.json) - it doesn't change how any endpoint behaves.
+API_DESCRIPTION = """
+Create short links and redirect them to the original URL.
+
+**How to use:** `POST /shorten` with a URL → you get a `short_url` back →
+open it in a browser and you're redirected.
+
+PostgreSQL stores the links (source of truth); Redis caches lookups.
+Service status: `/health` (JSON) or `/dashboard` (browser view).
+
+**Note:** don't test `GET /{short_code}` from this page — the browser blocks it
+from following a redirect to another site ("Failed to fetch"). Paste the
+`short_url` into the address bar instead.
+"""
+
+OPENAPI_TAGS = [
+    {"name": "Short links", "description": "Create a short link and resolve it."},
+    {"name": "Operations", "description": "Status checks for operators and Kubernetes probes."},
+]
+
+app = FastAPI(
+    title="URL Shortener",
+    version=APP_VERSION,
+    description=API_DESCRIPTION,
+    openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
+    redoc_url=None,  # /docs is the one docs page; the built-in /redoc was dropped
+    # Hide the "Schemas" section at the bottom of /docs - the same models are
+    # already shown inline under each endpoint.
+    swagger_ui_parameters={"defaultModelsExpandDepth": -1},
+)
+
+NOT_FOUND_RESPONSE = {
+    404: {
+        "description": "No short link with this code exists.",
+        "content": {"application/json": {"example": {"detail": "short code not found"}}},
+    }
+}
 
 
 @app.exception_handler(RequestValidationError)
@@ -78,7 +116,15 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
-@app.post("/shorten", response_model=ShortenResponse)
+@app.post(
+    "/shorten",
+    response_model=ShortenResponse,
+    tags=["Short links"],
+    summary="Create a short link",
+    description="Stores the URL and returns its short code. Shortening the same URL twice "
+    "returns two different codes (no deduplication, by design).",
+    responses={422: {"description": "Invalid input — not a valid http(s) URL, or longer than 2048 characters."}},
+)
 async def shorten_url(
     payload: ShortenRequest,
     request: Request,
@@ -96,7 +142,15 @@ async def shorten_url(
     return ShortenResponse(short_code=short_code, short_url=short_url)
 
 
-@app.get("/health", response_model=HealthResponse)
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["Operations"],
+    summary="Service status, dependencies and traffic counters",
+    description="Reports whether Postgres and Redis are reachable, the running version, uptime "
+    "and in-memory traffic counters. Used as the Kubernetes readiness probe.",
+    responses={503: {"description": "Degraded — Postgres or Redis is unreachable (same body, `status: degraded`)."}},
+)
 async def health(response: Response) -> HealthResponse:
     postgres_ok = await check_db()
     redis_ok = await check_redis()
@@ -113,17 +167,32 @@ async def health(response: Response) -> HealthResponse:
     )
 
 
-@app.get("/live")
+@app.get(
+    "/live",
+    tags=["Operations"],
+    summary="Liveness check",
+    description="Always returns `alive` if the process is running — no dependency checks. "
+    "Used as the Kubernetes liveness probe.",
+)
 async def live() -> dict:
     return {"status": "alive"}
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
+# A web page for people, not an API call - hidden from /docs, still served normally.
+@app.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard() -> str:
     return DASHBOARD_HTML
 
 
-@app.get("/{short_code}")
+@app.get(
+    "/{short_code}",
+    response_class=RedirectResponse,
+    status_code=302,
+    tags=["Short links"],
+    summary="Redirect to the original URL",
+    description="Looks the code up (Redis first, then Postgres) and redirects to the original URL.",
+    responses={302: {"description": "Redirect to the original URL (see the `Location` header)."}, **NOT_FOUND_RESPONSE},
+)
 async def resolve_short_code(
     short_code: str,
     db: AsyncSession = Depends(get_db),

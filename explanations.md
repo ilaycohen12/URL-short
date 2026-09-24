@@ -389,7 +389,11 @@ FastAPI builds an **OpenAPI spec** (a standard JSON description of the API, serv
 `/openapi.json`) straight from the code: the route decorators (`@app.post("/shorten")`) give the
 endpoints, and the Pydantic models in `schemas.py` give the request/response shapes and validation
 rules (`url: HttpUrl`). `/docs` is **Swagger UI** rendering that spec as a clickable page; `/redoc`
-is a read-only view of the same spec. No doc files exist in the repo — it's generated at runtime,
+(ReDoc) is FastAPI's other, read-only view of the same spec. Same data, different purpose: Swagger (`/docs`) is for *trying* the API (send
+requests, see responses); ReDoc (`/redoc`) is for *reading* it — three-column layout (menu /
+explanations / examples), no buttons — the page to hand someone who's new to the API. This project
+disables `/redoc` (`redoc_url=None`) to keep a single docs page — FastAPI's built-in one had also
+broken, because it loads the moving `redoc@next` CDN tag, which started pointing to a 3.x pre-release. No doc files exist in the repo — it's generated at runtime,
 so it can't drift from the code the way hand-written API docs do.
 
 Usage: expand an endpoint → "Try it out" → edit the body → Execute. Shows the equivalent `curl`
