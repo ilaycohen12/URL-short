@@ -284,8 +284,7 @@ refuses to overwrite a field someone changed with `kubectl`).
   that can take ~30–60s (cluster DNS comes up late). Without it, liveness killed the API
   mid-startup; with it, liveness only begins once the API has started.
 - **Host access**: `NodePort`, not `port-forward` - keeps working without an open terminal.
-- **Resources**: API/Postgres `100m–500m` CPU, `128–256Mi` memory; Redis lighter (`50m–200m`,
-  `64–128Mi`) since it does less work per request. Local-demo starting points, not load-tested.
+- **Resources**: requests and limits are set on all three - see *Resources: why these numbers* below.
 - **Rollback drift - handled by process + detection, not enforcement**: rolling back through git
   (above) keeps the file and cluster in sync, and `check-drift` detects anything that went around
   it. Nothing *prevents* someone from running `helm rollback` by hand - enforcing that is what a
@@ -293,6 +292,40 @@ refuses to overwrite a field someone changed with `kubectl`).
   automatically. Out of scope for a local assignment. (Why not a script that rolls back and then
   copies the cluster's values into `values.yaml`? That makes the cluster the source of truth -
   backwards - and `helm get values` only returns overrides, not the full config.)
+
+
+**Resources: why these numbers**
+
+A **request** is what Kubernetes reserves for the pod; a **limit** is the most it may use (above
+the CPU limit it is slowed down, above the memory limit it is killed and restarted). `100m` = a
+tenth of a CPU core.
+
+| | CPU request / limit | CPU used, idle | CPU used, under load | Memory request / limit | Memory used, idle | Memory used, under load |
+|---|---|---|---|---|---|---|
+| **API** | 100m / 500m | ~2m | ~70m (peak 93m) | 128Mi / 256Mi | 59 MB | 62 MB |
+| **Postgres** | 100m / 500m | ~0m | ~0m | 128Mi / 256Mi | 23 MB | 30 MB |
+| **Redis** | 50m / 200m | ~3m | ~11m | 64Mi / 128Mi | 3.7 MB | 4.3 MB |
+
+*Under load* = 50 users opening links nonstop for 60 seconds (about 3,350 requests, 0 errors, no
+restarts), measured with `crictl stats` on the kind node.
+
+Why these values:
+- **Requests cover normal traffic, not idle.** Usage grows with load, so the request is set
+  above what the service normally needs. The API's 100m CPU request matched the test well (it
+  used 70-93m); its memory barely changes with traffic (59 to 62 MB), so 128Mi is about double.
+- **Limits are 2-5x the request.** That leaves room for bursts, and still stops a runaway process
+  (a memory leak, a busy loop) from starving the other pods.
+- **Redis gets about half**, because it does the least work: it only keeps small copies of links.
+- **Postgres stayed idle in the test** because Redis answered almost every request after the first
+  few - the cache doing its job. Postgres keeps the same size as the API so it has room for
+  cache misses and writes.
+- **Small enough for a laptop:** all three together reserve about 10% of the machine's CPU and 7%
+  of its memory.
+
+These are starting values checked against a local test, not production sizing. For production:
+load-test from inside the cluster (the test above was limited by Docker Desktop's port forwarding
+at about 55 requests/s, not by the API), then set requests near typical usage and limits above
+the peak.
 
 ---
 
