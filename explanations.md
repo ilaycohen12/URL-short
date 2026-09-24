@@ -520,3 +520,19 @@ answer.
 someone should investigate the traceback. `503 Service Unavailable` = a temporary condition
 (here: the database can't be reached); the client can retry later. Keeping them separate keeps
 the `errors` counter meaningful: it only moves for real bugs.
+
+## Startup probes — "slow to start" is not "frozen"
+
+A liveness probe answers "is this process stuck? then restart it". But a process that's still
+*starting* (here: waiting for Postgres/DNS before it serves any HTTP) can't answer either — so
+liveness can't tell slow-start from hung, and kills a healthy pod mid-startup. A
+**startupProbe** runs first; until it succeeds, liveness and readiness are paused. Give it a
+generous budget (`periodSeconds × failureThreshold`) covering the worst realistic startup, and
+keep liveness strict for the time after that.
+
+## Stored data vs in-memory counters
+
+`links_stored` (counted in Postgres) is *state* — it survives restarts. The traffic counters
+are *in-memory metrics* of one process since it started — they reset to 0 on every restart and
+are per-replica. Showing both, clearly labelled, stops a restart from looking like data loss.
+Real monitoring stacks (Prometheus) handle counter resets explicitly for the same reason.

@@ -48,8 +48,12 @@ def healthy_dependencies(monkeypatch):
     async def up():
         return True
 
+    async def five_links():
+        return 5
+
     monkeypatch.setattr(main, "check_db", up)
     monkeypatch.setattr(main, "check_redis", up)
+    monkeypatch.setattr(main, "count_links", five_links)
 
 
 @pytest.mark.parametrize("error", [ConnectionRefusedError("refused"), TimeoutError("timed out")])
@@ -102,3 +106,17 @@ def test_redis_down_only_keeps_health_200(client, monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
     assert response.json()["redis"] is False
+
+
+def test_health_reports_links_stored_from_the_database(client):
+    # Stored links come from Postgres, so they survive restarts - unlike the in-memory metrics.
+    assert client.get("/health").json()["links_stored"] == 5
+
+
+def test_links_stored_is_null_when_postgres_is_down(client, monkeypatch):
+    async def down():
+        return False
+
+    monkeypatch.setattr(main, "check_db", down)
+
+    assert client.get("/health").json()["links_stored"] is None

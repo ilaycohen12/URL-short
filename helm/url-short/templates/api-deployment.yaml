@@ -25,6 +25,13 @@ spec:
                 name: url-short-config
             - secretRef:
                 name: url-short-secret
+          startupProbe:
+            httpGet:
+              path: {{ .Values.api.startupProbe.path }}
+              port: {{ .Values.api.servicePort }}
+            periodSeconds: {{ .Values.api.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.api.startupProbe.timeoutSeconds }}
           readinessProbe:
             httpGet:
               path: {{ .Values.api.readinessProbe.path }}

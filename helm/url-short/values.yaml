@@ -19,6 +19,14 @@ api:
     periodSeconds: 5
     failureThreshold: 3
     timeoutSeconds: 3
+  # Startup can be slow after a cluster restart (the API waits for Postgres/DNS before serving).
+  # Liveness only starts once this has passed, so a slow start is never mistaken for a frozen
+  # process and killed. 30 x 5s = up to 150s, matching the app's own startup retry window.
+  startupProbe:
+    path: /live
+    periodSeconds: 5
+    failureThreshold: 30
+    timeoutSeconds: 3
   livenessProbe:
     path: /live
     initialDelaySeconds: 10

@@ -37,6 +37,13 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
         yield session
 
 
+async def count_links() -> int:
+    """How many links are stored - read from Postgres, so unlike the traffic counters it survives
+    API restarts. (A plain COUNT(*) is fine at this scale; a huge table would use an estimate.)"""
+    async with engine.connect() as conn:
+        return (await conn.execute(text("SELECT count(*) FROM url_mappings"))).scalar_one()
+
+
 async def check_db() -> bool:
     try:
         async with engine.connect() as conn:

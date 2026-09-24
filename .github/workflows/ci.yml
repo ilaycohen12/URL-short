@@ -158,6 +158,12 @@ jobs:
           RESULT=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://localhost:8000/$CODE")
           echo "After restart: $RESULT"
           test "$RESULT" = "302 https://example.com/persist"
+          # /health's links_stored comes from Postgres, so it must not reset like the counters do
+          curl -s http://localhost:8000/health | grep -q '"links_stored":[1-9]'
+          # a slow start after the restart must not be mistaken for a hang (startupProbe)
+          KILLS=$(kubectl get events | grep -c "failed liveness probe" || true)
+          echo "Liveness-probe kills: $KILLS"
+          test "$KILLS" -eq 0
 
       - name: Debug info (only if something failed)
         if: failure()

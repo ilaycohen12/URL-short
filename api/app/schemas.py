@@ -42,4 +42,7 @@ class HealthResponse(BaseModel):
     redis: bool
     version: str
     uptime_seconds: float
+    # From Postgres - survives restarts. None when Postgres is unreachable.
+    links_stored: int | None
+    # In-memory, since this API process started - reset to 0 on every restart.
     metrics: Metrics

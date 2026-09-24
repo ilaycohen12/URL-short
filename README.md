@@ -296,7 +296,10 @@ field someone changed with `kubectl`).
   (verified live: pulls the pod out of the Service's routing during a real Postgres outage, and
   keeps it in during a Redis outage). `livenessProbe` → `/live` instead, deliberately —
   tying liveness to dependency health would make Kubernetes restart a healthy pod during a
-  Postgres outage, which can't fix Postgres and only adds churn.
+  Postgres outage, which can't fix Postgres and only adds churn. **`startupProbe`** → `/live`,
+  up to 150s: the API only starts serving once Postgres is reachable, and after a cluster restart
+  that can take ~30–60s (cluster DNS comes up late). Without it, liveness killed the API
+  mid-startup; with it, liveness only begins once the API has started.
 - **Host access**: `NodePort`, not `port-forward` — keeps working without an open terminal.
 - **Resources**: API/Postgres `100m–500m` CPU, `128–256Mi` memory; Redis lighter (`50m–200m`,
   `64–128Mi`) since it does less work per request. Local-demo starting points, not load-tested.
@@ -322,6 +325,7 @@ field someone changed with `kubectl`).
   "redis": true,
   "version": "v2",
   "uptime_seconds": 12.0,
+  "links_stored": 76,
   "metrics": {
     "shorten_requests": 6, "redirects": 6, "cache_hits": 2, "cache_misses": 4, "not_found": 1,
     "validation_errors": 0, "errors": 0, "db_unavailable": 0
@@ -340,8 +344,13 @@ field someone changed with `kubectl`).
 - **`/live`** is a separate, dependency-free check used for the liveness probe — see Part 2's
   "API probes" note for why the two are split.
 
+- **`links_stored`** — how many links exist, counted in Postgres. Unlike the traffic counters
+  below it survives restarts (`null` when Postgres is unreachable).
+
 **`/dashboard`** — open http://localhost:8000/dashboard in a browser: the same data as `/health`,
 styled and auto-refreshing every 3 seconds. Easier to glance at during an incident or a demo.
+**Links stored** is at the top; the counters below it are labelled *Traffic since API start* —
+after any restart they show 0 while your links are still there.
 
 **Metrics** — what each counter means:
 
@@ -364,7 +373,8 @@ How to read them:
   clients sending bad data, our code failing, or the database being unreachable.
 - `not_found` often ticks up by itself from browsers requesting `/favicon.ico`.
 - **Limits:** counters live in the API process's memory — they reset to 0 when the pod restarts
-  (including after a rollout/rollback), and each replica counts separately (we run 1).
+  (including after a rollout/rollback or `stop-k8s` + `setup-k8s`), and each replica counts
+  separately (we run 1). A 0 here does **not** mean data was lost — check `links_stored`.
 
 **Logs** — for the actual traceback behind an error:
 `kubectl logs -l app=api` (Kubernetes) or `docker compose logs api` (Compose).
@@ -427,7 +437,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `master` and e
 |---|---|---|
 | **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression, Redis-failure fallback, 503 on Postgres outage, fast `/health`) · `helm lint` + `helm template` · `docker build` | ~40s |
 | **Docker Compose on a clean checkout** | The brief's exact `docker compose up --build` with **no `.env`** → `smoke-test.sh` → Redis outage (links still redirect) | ~1 min |
-| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → Redis outage (API must stay ready, links still redirect) → Postgres outage (fast `503`s, recovers) → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
+| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → Redis outage (API must stay ready, links still redirect) → Postgres outage (fast `503`s, recovers) → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves, `links_stored` survived and no liveness kill | ~2 min |
 
 The Compose and Kubernetes jobs only start if the first one passes, and they use the **same scripts a tester
 runs** — so CI also proves the README's instructions work. On failure it prints pod status and

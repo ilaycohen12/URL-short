@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import cache_get, cache_set, check_redis, get_redis
 from app.dashboard import DASHBOARD_HTML
-from app.db import DB_UNAVAILABLE_ERRORS, check_db, get_db, init_models
+from app.db import DB_UNAVAILABLE_ERRORS, check_db, count_links, get_db, init_models
 from app.models import URLMapping
 from app.schemas import HealthResponse, Metrics, ShortenRequest, ShortenResponse
 from app.shortcode import decode, encode
@@ -170,6 +170,14 @@ async def shorten_url(
     return ShortenResponse(short_code=short_code, short_url=short_url)
 
 
+async def _links_stored() -> int | None:
+    """Stored-link count for /health, or None if Postgres can't answer in time."""
+    try:
+        return await asyncio.wait_for(count_links(), timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+    except (TimeoutError, *DB_UNAVAILABLE_ERRORS):
+        return None
+
+
 async def _check_within_timeout(check) -> bool:
     """A dependency check that takes too long counts as 'down' - /health must always answer fast."""
     try:
@@ -202,6 +210,7 @@ async def health(response: Response) -> HealthResponse:
         redis=redis_ok,
         version=APP_VERSION,
         uptime_seconds=round(time.monotonic() - START_TIME, 1),
+        links_stored=await _links_stored() if postgres_ok else None,
         metrics=Metrics(**_metrics),
     )
 

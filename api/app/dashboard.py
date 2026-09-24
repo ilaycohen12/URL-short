@@ -22,6 +22,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   .metrics { margin-top: 20px; }
   .metrics h2 { font-size: 13px; color: #9aa4b2; text-transform: uppercase;
                 letter-spacing: .05em; margin-bottom: 10px; }
+  .stored { font-weight: 700; font-size: 16px; }
+  .note { font-size: 11px; color: #5a6272; text-transform: none; letter-spacing: 0; }
   .updated { margin-top: 20px; font-size: 11px; color: #5a6272; text-align: center; }
 </style>
 </head>
@@ -33,8 +35,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   <div class="row"><span>Redis</span><span id="redis">-</span></div>
   <div class="row"><span>Version</span><span id="version">-</span></div>
   <div class="row"><span>Uptime</span><span id="uptime">-</span></div>
+  <div class="row stored"><span>Links stored</span><span id="stored">-</span></div>
   <div class="metrics">
-    <h2>Traffic</h2>
+    <h2>Traffic since API start <span class="note">(in memory - resets to 0 on restart; stored links above don't)</span></h2>
     <div class="row"><span>Shortened</span><span id="m_shorten">-</span></div>
     <div class="row"><span>Redirects</span><span id="m_redirect">-</span></div>
     <div class="row"><span>Cache hits</span><span id="m_hits">-</span></div>
@@ -64,6 +67,7 @@ async function refresh() {
       '<span class="dot ' + (d.redis ? 'up' : 'down') + '"></span>' + (d.redis ? 'up' : 'down');
     document.getElementById('version').textContent = d.version;
     document.getElementById('uptime').textContent = fmtUptime(d.uptime_seconds);
+    document.getElementById('stored').textContent = d.links_stored === null ? 'unknown (Postgres down)' : d.links_stored;
     document.getElementById('m_shorten').textContent = d.metrics.shorten_requests;
     document.getElementById('m_redirect').textContent = d.metrics.redirects;
     document.getElementById('m_hits').textContent = d.metrics.cache_hits;
