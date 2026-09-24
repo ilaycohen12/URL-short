@@ -57,7 +57,11 @@ case "$(helm version --template '{{.Version}}')" in
   v3.*) ;;
   *) HELM_FLAGS+=(--force-conflicts) ;;
 esac
-helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT" ${HELM_FLAGS[@]+"${HELM_FLAGS[@]}"}   # safe on empty array in bash 3.2 (macOS)
+# --reset-values: Helm remembers values given earlier with `helm upgrade --set ...`, and a plain
+# upgrade silently reuses them - so after a manual `--set api.image.tag=v99`, this script would
+# redeploy v99 instead of what git says. Resetting makes the release use only values.yaml.
+helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT" --reset-values \
+  ${HELM_FLAGS[@]+"${HELM_FLAGS[@]}"}   # safe on empty array in bash 3.2 (macOS)
 
 # Wait for each rollout, not for "pods with this label are Ready": during a rolling
 # update the OLD pod is still Ready, so a label-based wait returns before the new

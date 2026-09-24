@@ -115,6 +115,18 @@ jobs:
       - name: Drift check (cluster matches git)
         run: bash scripts/check-drift.sh
 
+      # A manual `helm upgrade --set` is remembered by Helm; setup-k8s must still restore what git
+      # says (it passes --reset-values). Before that fix, setup-k8s redeployed the --set value.
+      - name: Manual --set release is detected and undone by setup-k8s
+        run: |
+          helm upgrade url-short ./helm/url-short --set api.image.tag=v99   # a bad manual release
+          set +e; bash scripts/check-drift.sh; RC=$?; set -e
+          echo "check-drift exit code after --set: $RC"
+          test "$RC" -eq 1
+          bash scripts/setup-k8s.sh
+          bash scripts/check-drift.sh
+          helm get values url-short | tee /dev/stderr | grep -qx 'null'
+
       # Redis is only a cache: without it the API must keep serving from Postgres and stay in
       # the readiness pool (before the fix, readiness removed it after ~15s = full outage).
       - name: Redis outage - API stays ready and links still work

@@ -258,9 +258,10 @@ re-releases the version you rolled back from.
 2. **Live cluster vs git** (`kubectl diff`) - catches changes that bypass Helm completely
    (`kubectl set image` / `edit` / `scale` / `rollout undo`), which check 1 can't see.
 
-To fix drift, make git say what you want and run `setup-k8s` - it overwrites manual changes
-(`--force-conflicts`, needed because Helm 4's server-side apply otherwise refuses to overwrite a
-field someone changed with `kubectl`).
+To fix drift, make git say what you want and run `setup-k8s` - it overwrites manual changes.
+Two flags make that work: `--reset-values` (Helm remembers values from an earlier
+`helm upgrade --set` and would otherwise reuse them) and `--force-conflicts` (Helm 4 otherwise
+refuses to overwrite a field someone changed with `kubectl`).
 
 **Design notes:**
 - **Helm**, not plain manifests/Kustomize (all three allowed). Built and fully tested as plain
