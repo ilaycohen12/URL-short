@@ -17,7 +17,7 @@ async def init_models() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db() -> AsyncGenerator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
 
@@ -27,5 +27,5 @@ async def check_db() -> bool:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - any failure means "unhealthy", never an error
         return False

@@ -13,6 +13,4 @@ class URLMapping(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     original_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

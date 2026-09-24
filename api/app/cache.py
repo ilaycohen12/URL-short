@@ -14,5 +14,5 @@ async def get_redis() -> redis.Redis:
 async def check_redis() -> bool:
     try:
         return await redis_client.ping()
-    except Exception:
+    except Exception:  # noqa: BLE001 - any failure means "unhealthy", never an error
         return False

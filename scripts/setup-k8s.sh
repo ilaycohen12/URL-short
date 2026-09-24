@@ -47,11 +47,17 @@ echo "==> Loading image into the cluster..."
 kind load docker-image "url-short-api:$IMAGE_TAG" --name "$CLUSTER_NAME"
 
 echo "==> Installing/upgrading the Helm release..."
-# --force-conflicts: Helm 4 uses server-side apply, where each field has an owner. A manual
-# `kubectl set image`/`edit` takes ownership of that field, and a plain upgrade then fails with
-# a "conflict". Git is the source of truth, so git's values win (scripts/check-drift.sh shows
-# what would be overwritten beforehand).
-helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT" --force-conflicts
+# --force-conflicts (Helm 4 only): Helm 4 uses server-side apply, where each field has an owner.
+# A manual `kubectl set image`/`edit` takes ownership of that field, and a plain upgrade then
+# fails with a "conflict". Git is the source of truth, so git's values win (scripts/check-drift.sh
+# shows what would be overwritten beforehand). Helm 3 has no such flag - its client-side
+# three-way merge already overwrites manual changes.
+HELM_FLAGS=()
+case "$(helm version --template '{{.Version}}')" in
+  v3.*) ;;
+  *) HELM_FLAGS+=(--force-conflicts) ;;
+esac
+helm upgrade --install url-short "$CHART_DIR" --kube-context "$CONTEXT" ${HELM_FLAGS[@]+"${HELM_FLAGS[@]}"}   # safe on empty array in bash 3.2 (macOS)
 
 # Wait for each rollout, not for "pods with this label are Ready": during a rolling
 # update the OLD pod is still Ready, so a label-based wait returns before the new

@@ -1,0 +1,106 @@
+# CI: runs on GitHub's servers on every push to master and every pull request.
+# Job 1 checks the code (lint, unit tests, chart, image build). Job 2 deploys the whole system
+# to a real kind cluster using the repo's own scripts and tests it like a user would.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch: # adds a "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read # least privilege: CI only needs to read the code
+
+concurrency: # a newer push to the same branch cancels the older, now-pointless run
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, unit tests, chart, image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13" # same as the Dockerfile's base image
+          cache: pip
+          cache-dependency-path: api/requirements-dev.txt
+
+      - name: Install Python dependencies
+        run: pip install -r api/requirements-dev.txt
+
+      - name: Lint (ruff)
+        working-directory: api
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Unit tests (pytest)
+        working-directory: api
+        run: pytest -v
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.2.2
+
+      - name: Lint Helm chart
+        run: |
+          helm lint helm/url-short
+          helm template url-short helm/url-short > /dev/null
+
+      - name: Build Docker image
+        run: docker build -t url-short-api:ci ./api
+
+  e2e:
+    name: End-to-end on kind (Helm ${{ matrix.helm }})
+    needs: checks # don't spend ~5 min on a cluster if the basic checks already failed
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false # if one Helm version fails, still finish the other - shows which one broke
+      matrix:
+        helm: [v3.22.0, v4.2.2] # testers may have either; setup-k8s.sh handles both
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: ${{ matrix.helm }}
+
+      - name: Install kind + kubectl (the cluster itself is created by setup-k8s.sh)
+        uses: helm/kind-action@v1.15.0
+        with:
+          version: v0.33.0
+          install_only: true
+
+      - name: Deploy with scripts/setup-k8s.sh
+        run: bash scripts/setup-k8s.sh
+
+      - name: Smoke test (shorten, redirect, errors, health)
+        run: bash scripts/smoke-test.sh
+
+      - name: Drift check (cluster matches git)
+        run: bash scripts/check-drift.sh
+
+      - name: Data survives stop-k8s + setup-k8s
+        run: |
+          CODE=$(curl -s http://localhost:8000/shorten -H "Content-Type: application/json" \
+                   -d '{"url":"https://example.com/persist"}' | sed -n 's/.*"short_code":"\([^"]*\)".*/\1/p')
+          echo "Created short code: $CODE"
+          bash scripts/stop-k8s.sh
+          bash scripts/setup-k8s.sh
+          RESULT=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "http://localhost:8000/$CODE")
+          echo "After restart: $RESULT"
+          test "$RESULT" = "302 https://example.com/persist"
+
+      - name: Debug info (only if something failed)
+        if: failure()
+        run: |
+          kubectl get pods,svc,pvc -o wide || true
+          kubectl describe pods || true
+          kubectl logs -l app=api --tail=100 || true
+          kubectl logs -l app=postgres --tail=50 || true

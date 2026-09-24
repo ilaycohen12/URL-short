@@ -1,0 +1,13 @@
+# Tool config for the API (lint + tests). Not used by the Docker image, which only copies app/.
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint.flake8-bugbear]
+# `param = Depends(...)` is FastAPI's documented dependency-injection pattern, not a bug.
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]   # lets tests `import app.…` like the running service does

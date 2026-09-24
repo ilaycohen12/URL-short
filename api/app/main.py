@@ -45,7 +45,7 @@ async def wait_for_dependencies() -> None:
                 raise RuntimeError("redis not reachable")
             logger.info("Dependencies ready (attempt %d)", attempt)
             return
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep retrying on any startup error
             logger.warning(
                 "Dependencies not ready yet (attempt %d/%d): %s",
                 attempt,
@@ -112,7 +112,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     _metrics["errors"] += 1
-    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=True)
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
