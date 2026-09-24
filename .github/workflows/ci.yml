@@ -55,6 +55,35 @@ jobs:
       - name: Build Docker image
         run: docker build -t url-short-api:ci ./api
 
+  compose:
+    name: Docker Compose on a clean checkout
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Exactly the brief's command, with no .env file (a fresh checkout has none).
+      - name: docker compose up --build (no .env)
+        run: |
+          test ! -f .env
+          docker compose up --build -d
+          for i in $(seq 1 45); do curl -sf -o /dev/null http://localhost:8000/health && break; sleep 2; done
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh
+
+      - name: Redis outage - links still work (served from Postgres)
+        run: |
+          docker compose stop redis
+          RESULT=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:8000/1)
+          echo "Redirect with Redis down: $RESULT"
+          test "$RESULT" = "302 https://example.com/smoke-test"
+
+      - name: Debug info (only if something failed)
+        if: failure()
+        run: docker compose ps; docker compose logs --tail=100
+
   e2e:
     name: End-to-end on kind (Helm ${{ matrix.helm }})
     needs: checks # don't spend ~5 min on a cluster if the basic checks already failed
@@ -85,6 +114,21 @@ jobs:
 
       - name: Drift check (cluster matches git)
         run: bash scripts/check-drift.sh
+
+      # Redis is only a cache: without it the API must keep serving from Postgres and stay in
+      # the readiness pool (before the fix, readiness removed it after ~15s = full outage).
+      - name: Redis outage - API stays ready and links still work
+        run: |
+          kubectl scale deploy/redis --replicas=0
+          kubectl wait --for=delete pod -l app=redis --timeout=60s
+          sleep 20   # longer than readiness needs to fail (3 x 5s)
+          kubectl get pods -l app=api
+          test "$(kubectl get pods -l app=api -o jsonpath='{.items[0].status.containerStatuses[0].ready}')" = "true"
+          RESULT=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://localhost:8000/1)
+          echo "Redirect with Redis down: $RESULT"
+          test "$RESULT" = "302 https://example.com/smoke-test"
+          kubectl scale deploy/redis --replicas=1
+          kubectl rollout status deploy/redis --timeout=90s
 
       - name: Data survives stop-k8s + setup-k8s
         run: |

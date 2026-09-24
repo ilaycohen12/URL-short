@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.cache import check_redis, get_redis
+from app.cache import cache_get, cache_set, check_redis, get_redis
 from app.dashboard import DASHBOARD_HTML
 from app.db import check_db, get_db, init_models
 from app.models import URLMapping
@@ -41,9 +41,11 @@ async def wait_for_dependencies() -> None:
     for attempt in range(1, STARTUP_RETRY_ATTEMPTS + 1):
         try:
             await init_models()
-            if not await check_redis():
-                raise RuntimeError("redis not reachable")
             logger.info("Dependencies ready (attempt %d)", attempt)
+            # Redis is optional (cache only): don't block startup on it, or an API restart during
+            # a Redis outage would never come up.
+            if not await check_redis():
+                logger.warning("Redis not reachable at startup - serving from Postgres until it is")
             return
         except Exception as exc:  # noqa: BLE001 - keep retrying on any startup error
             logger.warning(
@@ -148,14 +150,18 @@ async def shorten_url(
     tags=["Operations"],
     summary="Service status, dependencies and traffic counters",
     description="Reports whether Postgres and Redis are reachable, the running version, uptime "
-    "and in-memory traffic counters. Used as the Kubernetes readiness probe.",
-    responses={503: {"description": "Degraded — Postgres or Redis is unreachable (same body, `status: degraded`)."}},
+    "and in-memory traffic counters. Used as the Kubernetes readiness probe. If only Redis is down, "
+    "returns 200 with `status: degraded` — requests are still served (from Postgres, without cache).",
+    responses={503: {"description": "Postgres is unreachable — the API can't serve requests (`status: degraded`)."}},
 )
 async def health(response: Response) -> HealthResponse:
     postgres_ok = await check_db()
     redis_ok = await check_redis()
     overall = "ok" if postgres_ok and redis_ok else "degraded"
-    if not (postgres_ok and redis_ok):
+    # 503 only when the API really can't work. Redis is just a cache: without it requests are
+    # served from Postgres, so the pod must stay in the readiness pool (a cache outage must not
+    # become a full outage). `redis: false` + "degraded" still tells on-call something is wrong.
+    if not postgres_ok:
         response.status_code = 503
     return HealthResponse(
         status=overall,
@@ -209,7 +215,7 @@ async def resolve_short_code(
         raise HTTPException(status_code=404, detail="short code not found")
 
     cache_key = f"url:{short_code}"
-    cached_url = await redis.get(cache_key)
+    cached_url = await cache_get(redis, cache_key)
     if cached_url:
         _metrics["cache_hits"] += 1
         _metrics["redirects"] += 1
@@ -222,7 +228,7 @@ async def resolve_short_code(
         _metrics["not_found"] += 1
         raise HTTPException(status_code=404, detail="short code not found")
 
-    await redis.set(cache_key, mapping.original_url)
+    await cache_set(redis, cache_key, mapping.original_url)
     _metrics["cache_misses"] += 1
     _metrics["redirects"] += 1
     logger.info("Cache miss for %s, populated cache from Postgres", short_code)

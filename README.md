@@ -70,8 +70,8 @@ Compose and Kubernetes are **two independent ways to run the same app**. Both se
 | | Docker Compose (Part 1) | Kubernetes (Part 2) |
 |---|---|---|
 | Needs | Docker with Compose | Docker, `kind`, `kubectl`, `helm` (v3 or v4) |
-| Start — Linux / macOS / Git Bash | `cp .env.example .env` then `docker compose up --build` | `bash scripts/setup-k8s.sh` |
-| Start — Windows PowerShell | `cp .env.example .env` then `docker compose up --build` | `.\scripts\setup-k8s.ps1` |
+| Start — Linux / macOS / Git Bash | `docker compose up --build` | `bash scripts/setup-k8s.sh` |
+| Start — Windows PowerShell | `docker compose up --build` | `.\scripts\setup-k8s.ps1` |
 | Stop, keep data — Linux / macOS / Git Bash | `docker compose down` | `bash scripts/stop-k8s.sh` |
 | Stop, keep data — Windows PowerShell | `docker compose down` | `.\scripts\stop-k8s.ps1` |
 | Full reset (delete all data) — Linux / macOS / Git Bash | `docker compose down -v` | `bash scripts/teardown-k8s.sh` |
@@ -148,9 +148,11 @@ address bar instead.
 
 **Run:**
 ```bash
-cp .env.example .env          # local config; .env is gitignored
 docker compose up --build     # builds the API image, starts Postgres + Redis + API
 ```
+Works on a clean clone as-is: every setting in `docker-compose.yml` has a fallback
+(`${POSTGRES_PASSWORD:-changeme}`) matching `.env.example`. To use your own values,
+`cp .env.example .env` and edit it — `.env` (gitignored) always wins over the fallbacks.
 The API waits for Postgres/Redis to report healthy before starting.
 
 **Stop:**
@@ -267,9 +269,12 @@ field someone changed with `kubectl`).
   `ReadWriteOnce` PVC can't be mounted by two pods at once) + PVC. Not a StatefulSet — single
   instance, no replication to justify one.
 - **Redis**: plain Deployment, no PVC (losing cache data on restart is correct, not a gap), no
-  auth (local-only scope).
-- **API probes**: `readinessProbe` → `/health` (verified live: pulls the pod out of the Service's
-  routing during a real dependency outage). `livenessProbe` → `/live` instead, deliberately —
+  auth (local-only scope). **Optional at runtime**: if Redis is down, lookups fall back to
+  Postgres (1s timeout) and the API keeps serving — a cache outage makes it slower, not
+  unavailable. The API also starts without it.
+- **API probes**: `readinessProbe` → `/health`, which returns `503` only when **Postgres** is down
+  (verified live: pulls the pod out of the Service's routing during a real Postgres outage, and
+  keeps it in during a Redis outage). `livenessProbe` → `/live` instead, deliberately —
   tying liveness to dependency health would make Kubernetes restart a healthy pod during a
   Postgres outage, which can't fix Postgres and only adds churn.
 - **Host access**: `NodePort`, not `port-forward` — keeps working without an open terminal.
@@ -303,9 +308,12 @@ field someone changed with `kubectl`).
   }
 }
 ```
-- Returns HTTP **`503`** (not `200`) with `"status": "degraded"` when Postgres or Redis is
-  unreachable. Probes and monitoring tools look at status codes, not JSON bodies, so this is what
-  makes Kubernetes stop routing traffic to the pod.
+- **Postgres unreachable** → HTTP **`503`**, `"status": "degraded"`. The API can't work without
+  it; probes and monitoring tools look at status codes, not JSON bodies, so this is what makes
+  Kubernetes stop routing traffic to the pod.
+- **Only Redis unreachable** → HTTP **`200`**, `"status": "degraded"`, `"redis": false`. Requests
+  are still served from Postgres (just without the cache), so the pod stays in service — on-call
+  still sees the problem in the body and in the logs (`Redis unavailable, reading from Postgres`).
 - **`/live`** is a separate, dependency-free check used for the liveness probe — see Part 2's
   "API probes" note for why the two are split.
 
@@ -343,7 +351,9 @@ Each entry below was tested against a real, deliberately-triggered failure — n
 assumption. See `documentation.md` for exactly how.
 
 **1. The API is running but requests fail**
-- Check `/health` first. `postgres`/`redis: false` → not this, go to #2.
+- Check `/health` first. `postgres: false` → not this, go to #2. `redis: false` → the cache is
+  down: requests still work (from Postgres) but slower; check `kubectl get pods -l app=redis` /
+  `docker compose ps redis` and its logs.
 - `/health` says `ok` but requests still fail → app-level bug. Check `errors` in the metrics, then
   the logs for a traceback.
 - *Real example hit during development:* a 2049–2083 char URL passed Pydantic's validation but
@@ -389,10 +399,11 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `master` and e
 
 | Job | What it does | Time |
 |---|---|---|
-| **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression) · `helm lint` + `helm template` · `docker build` | ~40s |
-| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
+| **Lint, unit tests, chart, image build** | `ruff` lint + format check · `pytest` (base62 codes, URL validation incl. the 2048-char regression, Redis-failure fallback) · `helm lint` + `helm template` · `docker build` | ~40s |
+| **Docker Compose on a clean checkout** | The brief's exact `docker compose up --build` with **no `.env`** → `smoke-test.sh` → Redis outage (links still redirect) | ~1 min |
+| **End-to-end on kind** (runs twice: Helm 3 and Helm 4) | Creates a real kind cluster with `scripts/setup-k8s.sh` → `smoke-test.sh` (shorten, redirect, cache hit, 404, 422, /health) → `check-drift.sh` → Redis outage (API must stay ready, links still redirect) → creates a link, `stop-k8s` + `setup-k8s`, confirms it still resolves | ~2 min |
 
-The end-to-end job only starts if the first one passes, and it uses the **same scripts a tester
+The Compose and Kubernetes jobs only start if the first one passes, and they use the **same scripts a tester
 runs** — so CI also proves the README's instructions work. On failure it prints pod status and
 logs. Verified it catches real bugs: changing the URL length check from `>` to `>=` turned the
 run red (`test_url_at_max_length_is_accepted FAILED`) and skipped the end-to-end job.

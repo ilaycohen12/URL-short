@@ -488,3 +488,22 @@ the fork's pushes). Nothing runs on anyone's laptop.
 likely bugs); unit tests (`pytest`) run small pieces of logic in isolation, in milliseconds;
 end-to-end runs the whole deployed system the way a user would. Each catches what the others
 can't, and they're ordered cheapest-first.
+
+## A cache must fail "open" (graceful degradation)
+
+A cache holds *copies* of data whose real home is elsewhere (here: Postgres). So when the cache
+fails, the right behaviour is to skip it — slower, still correct — never to fail the request.
+That takes three things: short timeouts on cache calls (so a dead cache doesn't hang every
+request), catching cache errors and treating them as a miss, and **not** making the cache a
+readiness requirement (otherwise Kubernetes turns a cache outage into a full outage by pulling
+every pod out of service). Health endpoints should still *report* the cache as down, so on-call
+knows performance is degraded. Rule of thumb for readiness: include only dependencies without
+which the pod genuinely cannot serve.
+
+## Compose variable fallbacks: `${VAR:-default}`
+
+In `docker-compose.yml`, `${VAR}` is replaced with the value from the shell or `.env`; if it's
+unset it becomes an empty string (with a warning). `${VAR:-default}` uses `default` when `VAR`
+is unset or empty, so the file works on a clean clone with no `.env`, while a `.env` still
+overrides it. (`${VAR:?message}` is the opposite: fail loudly if it's missing — the right choice
+for values that must never fall back, like real production secrets.)
