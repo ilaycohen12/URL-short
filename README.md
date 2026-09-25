@@ -41,6 +41,9 @@ URL-short/
 │   ├── values.yaml            # single source of truth for the Kubernetes deployment
 │   └── templates/             # api / postgres / redis Deployments + Services,
 │                              # postgres PVC, ConfigMap, Secret
+├── docs/
+│   ├── diagrams.html          # source of the README diagrams
+│   └── images/                # diagrams (SVG) + screenshots used in this README
 ├── k8s/
 │   └── kind-cluster.yaml
 ├── scripts/
@@ -281,7 +284,7 @@ refuses to overwrite a field someone changed with `kubectl`).
   tying liveness to dependency health would make Kubernetes restart a healthy pod during a
   Postgres outage, which can't fix Postgres and only adds churn. **`startupProbe`** → `/live`,
   up to 150s: the API only starts serving once Postgres is reachable, and after a cluster restart
-  that can take ~30–60s (cluster DNS comes up late). Without it, liveness killed the API
+  that can take ~30-60s (cluster DNS comes up late). Without it, liveness killed the API
   mid-startup; with it, liveness only begins once the API has started.
 - **Host access**: `NodePort`, not `port-forward` - keeps working without an open terminal.
 - **Resources**: requests and limits are set on all three - see *Resources: why these numbers* below.
@@ -407,7 +410,7 @@ Each entry below was tested by causing the failure for real, not written from as
   `docker compose ps redis` and its logs.
 - `/health` says `ok` but requests still fail → app-level bug. Check `errors` in the metrics, then
   the logs for a traceback.
-- *Real example hit during development:* a 2049–2083 char URL passed Pydantic's validation but
+- *Real example hit during development:* a 2049-2083 char URL passed Pydantic's validation but
   exceeded the DB column's 2048-char limit → raw `500` while `/health` stayed fully healthy. Log
   showed `StringDataRightTruncationError: value too long for type character varying(2048)`. Fixed
   by validating length at the API boundary.
@@ -444,13 +447,14 @@ Each entry below was tested by causing the failure for real, not written from as
 **3. A Kubernetes pod is running but receives no traffic**
 - `kubectl get pods` - `READY: 0/1` (container running, probe failing) is the signature.
 - `kubectl describe pod` - the Events section names the specific probe failure.
-- `kubectl get endpoints <service>` - confirms the pod's IP is genuinely missing from routing
+- `kubectl get endpointslices -l kubernetes.io/service-name=<service>` - confirms the pod's IP
+  is genuinely missing from routing
   (this is Kubernetes correctly protecting traffic - the goal is finding *why* it's not ready).
 - Root causes branch from there: dependency down (→ #2), crash-looping
   (`kubectl logs --previous`), misconfigured probe, or `OOMKilled`.
 - *Live-tested, real captured event:*
-  `Readiness probe failed: HTTP probe failed with statuscode: 503` - `kubectl get endpoints`
-  showed no endpoints while unready, `RESTARTS` stayed `0` throughout (readiness and liveness
+  `Readiness probe failed: HTTP probe failed with statuscode: 503` - the Service had no
+  endpoints while the pod was unready, `RESTARTS` stayed `0` throughout (readiness and liveness
   reacting independently, as designed).
 - *Verify recovery:* pod back to `1/1`, endpoint reappears, a request through the Service
   succeeds.
@@ -544,7 +548,7 @@ What I did, in order.
   Short URLs use `http://localhost:8000`.
 - **Anyone can create links** - no authentication, no rate limiting, no per-user ownership.
 - **Single instance of each component** (1 API replica, 1 Postgres, 1 Redis) - enough for a
-  demo; nothing is load-tested.
+  demo; only a small local load test was run (see Part 2's *Resources*), not production-scale.
 - **Credentials are placeholders** (`changeme`) - real ones would come from a gitignored `.env`
   / `values.secret.yaml` or a secret manager, never from git.
 - **Links never expire** and can't be edited or deleted.
@@ -592,8 +596,7 @@ turned out wrong and were changed or rejected:
 - **In-memory metrics** - reset on restart, per replica (Part 3 → Metrics).
 - **Redis has no auth** - fine for local-only scope, not for a shared environment.
 - **Smaller known gaps** - cached entries never expire (Redis grows without limit - fix: a TTL); leading zeros create
-  alias codes (`/1` = `/01`); the runbook's `kubectl get endpoints` is deprecated in favour of
-  `kubectl get endpointslices`.
+  alias codes (`/1` = `/01`).
 - **CI only, no CD** - every push is checked (see [CI](#ci)), but nothing deploys automatically;
   there's no shared cluster to deploy to. Next steps would be publishing versioned images to a
   registry (e.g. GHCR) and a GitOps controller (ArgoCD/Flux) deploying from git.
