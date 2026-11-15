@@ -114,6 +114,8 @@ http://localhost:8000/dashboard (same data, auto-refreshing). Explained in
 
 ## Using the API
 
+The easiest way: open **http://localhost:8000** - a simple web page where you paste a link and get a short one (it calls the same `POST /shorten` below).
+
 | Endpoint | Description |
 |---|---|
 | `POST /shorten` | Body: `{"url": "https://..."}` (max 2048 chars). Returns `{"short_code", "short_url"}`. |
@@ -203,8 +205,8 @@ bash scripts/setup-k8s.sh          # Linux / macOS / Git Bash
 **Run - manual steps** (what the script wraps):
 ```bash
 kind create cluster --name url-short --config k8s/kind-cluster.yaml
-docker build -t url-short-api:v2 ./api                      # tag must match api.image.tag in values.yaml
-kind load docker-image url-short-api:v2 --name url-short    # kind has its own image store - do this for every tag you use
+docker build -t url-short-api:v3 ./api                      # tag must match api.image.tag in values.yaml
+kind load docker-image url-short-api:v3 --name url-short    # kind has its own image store - do this for every tag you use
 helm install url-short ./helm/url-short
 ```
 
@@ -342,7 +344,7 @@ the peak.
   "status": "ok",
   "postgres": true,
   "redis": true,
-  "version": "v2",
+  "version": "v3",
   "uptime_seconds": 12.0,
   "links_stored": 76,
   "metrics": {

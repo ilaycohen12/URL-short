@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.cache import cache_get, cache_set, check_redis, get_redis
 from app.dashboard import DASHBOARD_HTML
 from app.db import DB_UNAVAILABLE_ERRORS, check_db, count_links, get_db, init_models
+from app.home import HOME_HTML
 from app.models import URLMapping
 from app.schemas import HealthResponse, Metrics, ShortenRequest, ShortenResponse
 from app.shortcode import decode, encode
@@ -224,6 +225,12 @@ async def health(response: Response) -> HealthResponse:
 )
 async def live() -> dict:
     return {"status": "alive"}
+
+
+# Home page for people: a form that calls POST /shorten - hidden from /docs.
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def home() -> str:
+    return HOME_HTML
 
 
 # A web page for people, not an API call - hidden from /docs, still served normally.
