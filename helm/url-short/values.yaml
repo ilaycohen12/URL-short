@@ -1,7 +1,7 @@
 api:
   image:
     repository: url-short-api
-    tag: v2
+    tag: v3
     pullPolicy: IfNotPresent
   replicas: 1
   servicePort: 8000

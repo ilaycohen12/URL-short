@@ -120,3 +120,10 @@ def test_links_stored_is_null_when_postgres_is_down(client, monkeypatch):
     monkeypatch.setattr(main, "check_db", down)
 
     assert client.get("/health").json()["links_stored"] is None
+
+
+def test_home_page_is_served(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "/shorten" in response.text
