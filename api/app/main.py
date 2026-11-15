@@ -27,7 +27,7 @@ POSTGRES_INT_MAX = 2_147_483_647
 # Each /health dependency check must answer within this, below the readiness probe's 3s
 # timeoutSeconds - so the probe always gets a real 503 instead of timing out itself.
 HEALTH_CHECK_TIMEOUT_SECONDS = 2
-APP_VERSION = "v2"
+APP_VERSION = "v3"
 
 START_TIME = time.monotonic()
 _metrics = {
